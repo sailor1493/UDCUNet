@@ -12,6 +12,11 @@ from basicsr.data.util import (paired_paths_from_meta_info_file,
 from basicsr.utils import FileClient
 from basicsr.utils.registry import DATASET_REGISTRY
 
+#
+# UDCUNet's PairedImgPSFNpyDataset is actually PairedImgNpyDataset in DISCNet
+# I guess they didn't read basicsr documentation.
+#
+
 
 @DATASET_REGISTRY.register()
 class PairedImgPSFNpyDataset(data.Dataset):
@@ -68,7 +73,6 @@ class PairedImgPSFNpyDataset(data.Dataset):
             #                 [lq_folder, gt_folder], ['lq', 'gt'],
             #                 folder_opt['meta_info_file'], self.filename_tmpl)
 
-
     def _tonemap(self, x, type='simple'):
         if type == 'mu_law':
             norm_x = x / x.max()
@@ -84,10 +88,10 @@ class PairedImgPSFNpyDataset(data.Dataset):
     def _expand_dim(self, x):
         # expand dimemsion if images are gray.
         if x.ndim == 2:
-            return x[:,:,None]
+            return x[:, :, None]
         else:
             return x
-        
+
     def __getitem__(self, index):
         if self.file_client is None:
             self.file_client = FileClient(

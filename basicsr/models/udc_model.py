@@ -12,7 +12,7 @@ from basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
 
 import numpy as np
-
+import torchinfo
 
 def tone_map(x, c=0.25):
     # Modified Reinhard tone mapping.
@@ -30,6 +30,7 @@ class UDCModel(BaseModel):
         self.net_g = build_network(opt['network_g'])
         self.net_g = self.model_to_device(self.net_g)
         self.print_network(self.net_g)
+        # torchinfo.summary(self.net_g, (8, 3, 256, 256))
 
         # load pretrained models
         load_path = self.opt['path'].get('pretrain_network_g', None)
@@ -77,6 +78,9 @@ class UDCModel(BaseModel):
         # set up optimizers and schedulers
         self.setup_optimizers()
         self.setup_schedulers()
+
+        # for ad-hoc csv logger
+        self.init_csv_logger()
 
     def setup_optimizers(self):
         train_opt = self.opt['train']
@@ -219,6 +223,7 @@ class UDCModel(BaseModel):
 
             self._log_validation_metric_values(current_iter, dataset_name, tb_logger)
 
+
     def _log_validation_metric_values(self, current_iter, dataset_name, tb_logger):
         log_str = f'Validation {dataset_name}\n'
         for metric, value in self.metric_results.items():
@@ -233,6 +238,18 @@ class UDCModel(BaseModel):
         if tb_logger:
             for metric, value in self.metric_results.items():
                 tb_logger.add_scalar(f'metrics/{dataset_name}/{metric}', value, current_iter)
+        if self._adhoc_csv_enabled():
+            self._log_csv(current_iter)
+    
+    def _log_csv(self, current_iter):
+        line = f"{current_iter}"
+        for metric in self.metric_names:
+            value = self.metric_results[metric]
+            line += f",{value:.6f}"
+        with open(self.__ad_hoc_csv_filename, "a") as f:
+            f.write("\n" + line)
+        
+
 
     def get_current_visuals(self):
         out_dict = OrderedDict()
@@ -248,4 +265,24 @@ class UDCModel(BaseModel):
         else:
             self.save_network(self.net_g, 'net_g', current_iter)
         self.save_training_state(epoch, current_iter)
+
+    def init_csv_logger(self):
+        # print(self.opt["ad_hoc_logger"])
+        if not self._adhoc_csv_enabled():
+            return
+        filename = self.opt["ad_hoc_logger"].get("path") + ".csv"
+        self.metric_names = self.opt['val']['metrics'].keys()
+
+        header = "iter,"
+        for metric_name in self.metric_names:
+            header += f"{metric_name},"
+        
+        header = header[:-1]
+        
+        with open(filename, "w") as f:
+            f.write(header)
+            self.__ad_hoc_csv_filename = filename
+            
+    def _adhoc_csv_enabled(self):
+        return self.opt.get("ad_hoc_logger", False) and self.opt["ad_hoc_logger"].get("type", False) == "csv"
 

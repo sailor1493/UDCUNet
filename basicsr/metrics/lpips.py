@@ -10,7 +10,6 @@ import lpips
 
 loss_fn_alex = lpips.LPIPS(net='alex', version='0.1')
 
-
 # loss_fn_vgg = lpips.LPIPS(net='vgg') # closer to "traditional" perceptual loss, when used for optimization
 
 def im2tensor(image, imtype=np.uint8, cent=1., factor=255. / 2.):
