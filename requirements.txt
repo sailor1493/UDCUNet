@@ -2,7 +2,7 @@ addict
 future
 lmdb
 matplotlib
-mmcv>=0.6
+mmcv==0.6
 numpy
 opencv-python
 pyyaml
@@ -10,7 +10,7 @@ scikit-image
 scipy
 tb-nightly
 yapf
-torch>=1.7
-torchvision
+torch==1.7.0
+torchvision==0.8.0
 tqdm
-
+lpips
