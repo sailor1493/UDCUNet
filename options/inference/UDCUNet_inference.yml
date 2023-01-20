@@ -14,8 +14,8 @@ datasets:
       type: npy
     folders:
       rot_5:
-        dataroot_lq: ./datasets/test/input
-        dataroot_gt: ./datasets/test/input
+        dataroot_lq: ./datasets/validation/input
+        dataroot_gt: ./datasets/validation/input
 
 
 # network structures

@@ -90,6 +90,14 @@ val:
       type: calculate_psnr
       crop_border: 4
       test_y_channel: false
+    ssim:
+      type: calculate_ssim
+      crop_border: 4
+      test_y_channel: false
+    lpips: # metric name, can be arbitrary
+      type: calculate_lpips
+      crop_border: 4
+      test_y_channel: false
 
 # logging settings
 logger:
