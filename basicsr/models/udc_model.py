@@ -3,6 +3,7 @@ from collections import OrderedDict
 from os import path as osp
 from tqdm import tqdm
 import os
+import math
 
 from basicsr.archs import build_network
 from basicsr.losses import build_loss
@@ -131,16 +132,92 @@ class UDCModel(BaseModel):
             self.model_ema(decay=self.ema_decay)
 
     def test(self):
-        if hasattr(self, 'net_g_ema'):
+        N, C, H, W = self.lq.shape
+        if H > 1000 or W > 1000:
+            self.output = self.test_crop9()
+        elif hasattr(self, 'net_g_ema'):
             self.net_g_ema.eval()
             with torch.no_grad():
                 self.output = self.net_g_ema(self.lq)
+            self.net_g_ema.train()
         else:
             self.net_g.eval()
             with torch.no_grad():
                 self.output = self.net_g(self.lq)
             self.net_g.train()
+    
+    def test_crop9(self):
+        if hasattr(self, "net_g_ema"):
+            return self.test_crop_ema()
+        else:
+            return self.test_crop_netg()
 
+    def calculate_crop(self, shape):
+        _, _. H, W = shape
+        h, w = math.ceil(H/3), math.ceil(W/3)
+        rf = 30
+        return (
+            (h, w, rf),
+            (0, self.down(h + rf), 0, self.down(w + rf)),
+            (self.down(h - rf), self.down(2*h + rf), 0, self.down(w + rf)),
+            (self.down(2*h - rf), H, 0, self.down(w + rf)),
+            (0, self.down(h + rf), self.down(w - rf), self.down(2*w + rf)),
+            (self.down(h - rf), self.down(2*h + rf), self.down(w - rf), self.down(2*w + rf)),
+            (self.down(2*h - rf), H, self.down(w - rf), self.down(2*w + rf)),
+            (0, self.down(h + rf), self.down(2*w - rf), W),
+            (self.down(h - rf), self.down(2*h + rf), self.down(2*w - rf), W),
+            (self.down(2*h - rf), H, self.down(2*w - rf), W),
+        )
+
+    def down(self, number, divisor=8):
+        return (number // divisor) * divisor
+    
+    def test_crop_netg(self):
+        self.net_g.eval()
+        calculated = self.calculate_crop(self.lq.shape)
+        h, w, rf = calculated[0]
+
+        with torch.no_grad():
+            imTL = self.net_g(self.lq[:,:,calculated[1][0]:calculated[1][1], calculated[1][2]:calculated[1][3]])[:, :, 0:h, 0:w]
+            imML = self.net_g(self.lq[:,:,calculated[2][0]:calculated[2][1], calculated[2][2]:calculated[2][3]])[:, :, rf:(rf+h), 0:w]
+            imBL = self.net_g(self.lq[:,:,calculated[3][0]:calculated[3][1], calculated[3][2]:calculated[3][3]])[:, :, rf:, 0:w]
+            imTM = self.net_g(self.lq[:,:,calculated[4][0]:calculated[4][1], calculated[4][2]:calculated[4][3]])[:, :, 0:h, rf:(rf+w)]
+            imMM = self.net_g(self.lq[:,:,calculated[5][0]:calculated[5][1], calculated[5][2]:calculated[5][3]])[:, :, rf:(rf+h), rf:(rf+w)]
+            imBM = self.net_g(self.lq[:,:,calculated[6][0]:calculated[6][1], calculated[6][2]:calculated[6][3]])[:, :, rf:, rf:(rf+w)]
+            imTR = self.net_g(self.lq[:,:,calculated[7][0]:calculated[7][1], calculated[7][2]:calculated[7][3]])[:, :, 0:h, rf:]
+            imMR = self.net_g(self.lq[:,:,calculated[8][0]:calculated[8][1], calculated[8][2]:calculated[8][3]])[:, :, rf:(rf+h), rf:]
+            imBR = self.net_g(self.lq[:,:,calculated[9][0]:calculated[9][1], calculated[9][2]:calculated[9][3]])[:, :, rf:, rf:]
+
+        imT = torch.cat((imTL, imTM, imTR), 3)
+        imM = torch.cat((imML, imMM, imMR), 3)
+        imB = torch.cat((imBL, imBM, imBR), 3)
+        output_cat = torch.cat((imT, imM, imB), 2)
+        self.net_g.train()
+        return output_cat
+    
+    def test_crop_ema(self):
+        self.net_g_ema.eval()
+        N, C, H, W = self.lq.shape
+        h, w = math.ceil(H/3), math.ceil(W/3)
+        rf = 30
+        with torch.no_grad():
+            imTL = self.net_g_ema(self.lq[:, :, 0:h+rf,      0:w+rf])[:, :, 0:h, 0:w]
+            imML = self.net_g_ema(self.lq[:, :, h-rf:2*h+rf, 0:w+rf])[:, :, rf:(rf+h), 0:w]
+            imBL = self.net_g_ema(self.lq[:, :, 2*h-rf:,     0:w+rf])[:, :, rf:, 0:w]
+            imTM = self.net_g_ema(self.lq[:, :, 0:h+rf,      w-rf:2*w+rf])[:, :, 0:h, rf:(rf+w)]
+            imMM = self.net_g_ema(self.lq[:, :, h-rf:2*h+rf, w-rf:2*w+rf])[:, :, rf:(rf+h), rf:(rf+w)]
+            imBM = self.net_g_ema(self.lq[:, :, 2*h-rf:,     w-rf:2*w+rf])[:, :, rf:, rf:(rf+w)]
+            imTR = self.net_g_ema(self.lq[:, :, 0:h+rf,      2*w-rf:])[:, :, 0:h, rf:]
+            imMR = self.net_g_ema(self.lq[:, :, h-rf:2*h+rf, 2*w-rf:])[:, :, rf:(rf+h), rf:]
+            imBR = self.net_g_ema(self.lq[:, :, 2*h-rf:,     2*w-rf:])[:, :, rf:, rf:]
+
+        imT = torch.cat((imTL, imTM, imTR), 3)
+        imM = torch.cat((imML, imMM, imMR), 3)
+        imB = torch.cat((imBL, imBM, imBR), 3)
+        output_cat = torch.cat((imT, imM, imB), 2)
+        self.net_g_ema.train()
+        return output_cat
+    
 
     def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
         if self.opt['rank'] == 0:

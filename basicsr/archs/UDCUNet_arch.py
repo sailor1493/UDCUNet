@@ -101,9 +101,7 @@ class UDCUNet(nn.Module):
 
         psf = psf.expand(x.shape[0], -1, x.shape[2], x.shape[3]).cuda()
         k_fea = torch.cat((x, psf), 1)
-        # print(psf.dtype)
-        # print(x.dtype)
-        # print(k_fea.dtype)
+        
         k_fea = self.k_first(self.k_head(k_fea))
         kernel0 = self.KNet0(k_fea)
         kernel1 = self.KNet1(k_fea)
@@ -126,8 +124,7 @@ class UDCUNet(nn.Module):
 
         fea2, _ = self.enconv_layer2((down1, cond2))
         down2 = self.down_conv2(fea2)
-        # print(down2.shape)
-        # print(kernel3.shape)
+        
         feaB, _ = self.Bottom_conv((down2, cond3))
         feaB = feaB + kernel2d_conv(down2, kernel3, self.DyK_size)
 
