@@ -13,6 +13,7 @@ from basicsr.utils import (AvgTimer, MessageLogger, check_resume, get_env_info, 
                            init_tb_logger, init_wandb_logger, make_exp_dirs, mkdir_and_rename, scandir)
 from basicsr.utils.options import copy_opt_file, dict2str, parse_options
 
+
 def init_tb_loggers(opt):
     # initialize wandb logger before tensorboard logger to allow proper sync
     if (opt['logger'].get('wandb') is not None) and (opt['logger']['wandb'].get('project')
@@ -188,6 +189,10 @@ def train_pipeline(root_path):
             if opt.get('val') is not None and (current_iter % opt['val']['val_freq'] == 0):
                 if len(val_loaders) > 1:
                     logger.warning('Multiple validation datasets are *only* supported by SRModel.')
+
+                # we validate model with train-dataset also
+                model.validation(train_loader, current_iter, tb_logger, False)
+
                 for val_loader in val_loaders:
                     model.validation(val_loader, current_iter, tb_logger, opt['val']['save_img'])
 

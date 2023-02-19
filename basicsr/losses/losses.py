@@ -36,10 +36,22 @@ def charbonnier_loss(pred, target, eps=1e-12):
 class map_L1Loss(nn.Module):
     def __init__(self):
         super(map_L1Loss, self).__init__()
+
     def forward(self, x, y):
         loss = torch.mean(torch.abs(tone_map(x) - tone_map(y)))
         return loss
-    
+
+
+@LOSS_REGISTRY.register()
+class clamp_L1loss(nn.Module):
+    def __init__(self):
+        super(clamp_L1loss, self).__init__()
+
+    def forward(self, x, y):
+        x = torch.clamp(x, 0, 1)
+        y = torch.clamp(y, 0, 1)
+        return torch.mean(torch.abs(x - y))
+
 
 @LOSS_REGISTRY.register()
 class L1Loss(nn.Module):
@@ -511,6 +523,7 @@ class GANFeatLoss(nn.Module):
 class tanh_L1Loss(nn.Module):
     def __init__(self):
         super(tanh_L1Loss, self).__init__()
+
     def forward(self, x, y):
         loss = torch.mean(torch.abs(torch.tanh(x) - torch.tanh(y)))
         return loss

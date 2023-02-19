@@ -15,10 +15,12 @@ from .base_model import BaseModel
 import numpy as np
 import torchinfo
 
+
 def tone_map(x, c=0.25):
     # Modified Reinhard tone mapping.
     mapped_x = x / (x + c)
     return mapped_x
+
 
 @MODEL_REGISTRY.register()
 class UDCModel(BaseModel):
@@ -104,7 +106,7 @@ class UDCModel(BaseModel):
 
     def optimize_parameters(self, current_iter):
         self.optimizer_g.zero_grad()
-        self.output = self.net_g(self.lq)
+        self.output = self.net_g(self.lq)  # here we run forward pass
 
         l_total = 0
         loss_dict = OrderedDict()
@@ -133,9 +135,9 @@ class UDCModel(BaseModel):
 
     def test(self):
         N, C, H, W = self.lq.shape
-        if H > 1000 or W > 1000:
-            self.output = self.test_crop9()
-        elif hasattr(self, 'net_g_ema'):
+        # if H > 1000 or W > 1000:
+        #   self.output = self.test_crop9()
+        if hasattr(self, 'net_g_ema'):
             self.net_g_ema.eval()
             with torch.no_grad():
                 self.output = self.net_g_ema(self.lq)
@@ -145,7 +147,7 @@ class UDCModel(BaseModel):
             with torch.no_grad():
                 self.output = self.net_g(self.lq)
             self.net_g.train()
-    
+
     def test_crop9(self):
         if hasattr(self, "net_g_ema"):
             return self.test_crop_ema()
@@ -153,40 +155,49 @@ class UDCModel(BaseModel):
             return self.test_crop_netg()
 
     def calculate_crop(self, shape):
-        _, _. H, W = shape
-        h, w = math.ceil(H/3), math.ceil(W/3)
+        _, _, H, W = shape
+        h, w = math.ceil(H / 3), math.ceil(W / 3)
         rf = 30
         return (
             (h, w, rf),
             (0, self.down(h + rf), 0, self.down(w + rf)),
-            (self.down(h - rf), self.down(2*h + rf), 0, self.down(w + rf)),
-            (self.down(2*h - rf), H, 0, self.down(w + rf)),
-            (0, self.down(h + rf), self.down(w - rf), self.down(2*w + rf)),
-            (self.down(h - rf), self.down(2*h + rf), self.down(w - rf), self.down(2*w + rf)),
-            (self.down(2*h - rf), H, self.down(w - rf), self.down(2*w + rf)),
-            (0, self.down(h + rf), self.down(2*w - rf), W),
-            (self.down(h - rf), self.down(2*h + rf), self.down(2*w - rf), W),
-            (self.down(2*h - rf), H, self.down(2*w - rf), W),
+            (self.down(h - rf), self.down(2 * h + rf), 0, self.down(w + rf)),
+            (self.down(2 * h - rf), H, 0, self.down(w + rf)),
+            (0, self.down(h + rf), self.down(w - rf), self.down(2 * w + rf)),
+            (self.down(h - rf), self.down(2 * h + rf), self.down(w - rf), self.down(2 * w + rf)),
+            (self.down(2 * h - rf), H, self.down(w - rf), self.down(2 * w + rf)),
+            (0, self.down(h + rf), self.down(2 * w - rf), W),
+            (self.down(h - rf), self.down(2 * h + rf), self.down(2 * w - rf), W),
+            (self.down(2 * h - rf), H, self.down(2 * w - rf), W),
         )
 
     def down(self, number, divisor=8):
         return (number // divisor) * divisor
-    
+
     def test_crop_netg(self):
         self.net_g.eval()
         calculated = self.calculate_crop(self.lq.shape)
         h, w, rf = calculated[0]
 
         with torch.no_grad():
-            imTL = self.net_g(self.lq[:,:,calculated[1][0]:calculated[1][1], calculated[1][2]:calculated[1][3]])[:, :, 0:h, 0:w]
-            imML = self.net_g(self.lq[:,:,calculated[2][0]:calculated[2][1], calculated[2][2]:calculated[2][3]])[:, :, rf:(rf+h), 0:w]
-            imBL = self.net_g(self.lq[:,:,calculated[3][0]:calculated[3][1], calculated[3][2]:calculated[3][3]])[:, :, rf:, 0:w]
-            imTM = self.net_g(self.lq[:,:,calculated[4][0]:calculated[4][1], calculated[4][2]:calculated[4][3]])[:, :, 0:h, rf:(rf+w)]
-            imMM = self.net_g(self.lq[:,:,calculated[5][0]:calculated[5][1], calculated[5][2]:calculated[5][3]])[:, :, rf:(rf+h), rf:(rf+w)]
-            imBM = self.net_g(self.lq[:,:,calculated[6][0]:calculated[6][1], calculated[6][2]:calculated[6][3]])[:, :, rf:, rf:(rf+w)]
-            imTR = self.net_g(self.lq[:,:,calculated[7][0]:calculated[7][1], calculated[7][2]:calculated[7][3]])[:, :, 0:h, rf:]
-            imMR = self.net_g(self.lq[:,:,calculated[8][0]:calculated[8][1], calculated[8][2]:calculated[8][3]])[:, :, rf:(rf+h), rf:]
-            imBR = self.net_g(self.lq[:,:,calculated[9][0]:calculated[9][1], calculated[9][2]:calculated[9][3]])[:, :, rf:, rf:]
+            imTL = self.net_g(self.lq[:, :, calculated[1][0]:calculated[1][1],
+                              calculated[1][2]:calculated[1][3]])[:, :, 0:h, 0:w]
+            imML = self.net_g(self.lq[:, :, calculated[2][0]:calculated[2][1],
+                              calculated[2][2]:calculated[2][3]])[:, :, rf:(rf + h), 0:w]
+            imBL = self.net_g(self.lq[:, :, calculated[3][0]:calculated[3][1],
+                              calculated[3][2]:calculated[3][3]])[:, :, rf:, 0:w]
+            imTM = self.net_g(self.lq[:, :, calculated[4][0]:calculated[4][1],
+                              calculated[4][2]:calculated[4][3]])[:, :, 0:h, rf:(rf + w)]
+            imMM = self.net_g(self.lq[:, :, calculated[5][0]:calculated[5][1], calculated[5]
+                              [2]:calculated[5][3]])[:, :, rf:(rf + h), rf:(rf + w)]
+            imBM = self.net_g(self.lq[:, :, calculated[6][0]:calculated[6][1],
+                              calculated[6][2]:calculated[6][3]])[:, :, rf:, rf:(rf + w)]
+            imTR = self.net_g(self.lq[:, :, calculated[7][0]:calculated[7][1],
+                              calculated[7][2]:calculated[7][3]])[:, :, 0:h, rf:]
+            imMR = self.net_g(self.lq[:, :, calculated[8][0]:calculated[8][1],
+                              calculated[8][2]:calculated[8][3]])[:, :, rf:(rf + h), rf:]
+            imBR = self.net_g(self.lq[:, :, calculated[9][0]:calculated[9][1],
+                              calculated[9][2]:calculated[9][3]])[:, :, rf:, rf:]
 
         imT = torch.cat((imTL, imTM, imTR), 3)
         imM = torch.cat((imML, imMM, imMR), 3)
@@ -194,22 +205,22 @@ class UDCModel(BaseModel):
         output_cat = torch.cat((imT, imM, imB), 2)
         self.net_g.train()
         return output_cat
-    
+
     def test_crop_ema(self):
         self.net_g_ema.eval()
         N, C, H, W = self.lq.shape
-        h, w = math.ceil(H/3), math.ceil(W/3)
+        h, w = math.ceil(H / 3), math.ceil(W / 3)
         rf = 30
         with torch.no_grad():
-            imTL = self.net_g_ema(self.lq[:, :, 0:h+rf,      0:w+rf])[:, :, 0:h, 0:w]
-            imML = self.net_g_ema(self.lq[:, :, h-rf:2*h+rf, 0:w+rf])[:, :, rf:(rf+h), 0:w]
-            imBL = self.net_g_ema(self.lq[:, :, 2*h-rf:,     0:w+rf])[:, :, rf:, 0:w]
-            imTM = self.net_g_ema(self.lq[:, :, 0:h+rf,      w-rf:2*w+rf])[:, :, 0:h, rf:(rf+w)]
-            imMM = self.net_g_ema(self.lq[:, :, h-rf:2*h+rf, w-rf:2*w+rf])[:, :, rf:(rf+h), rf:(rf+w)]
-            imBM = self.net_g_ema(self.lq[:, :, 2*h-rf:,     w-rf:2*w+rf])[:, :, rf:, rf:(rf+w)]
-            imTR = self.net_g_ema(self.lq[:, :, 0:h+rf,      2*w-rf:])[:, :, 0:h, rf:]
-            imMR = self.net_g_ema(self.lq[:, :, h-rf:2*h+rf, 2*w-rf:])[:, :, rf:(rf+h), rf:]
-            imBR = self.net_g_ema(self.lq[:, :, 2*h-rf:,     2*w-rf:])[:, :, rf:, rf:]
+            imTL = self.net_g_ema(self.lq[:, :, 0:h + rf, 0:w + rf])[:, :, 0:h, 0:w]
+            imML = self.net_g_ema(self.lq[:, :, h - rf:2 * h + rf, 0:w + rf])[:, :, rf:(rf + h), 0:w]
+            imBL = self.net_g_ema(self.lq[:, :, 2 * h - rf:, 0:w + rf])[:, :, rf:, 0:w]
+            imTM = self.net_g_ema(self.lq[:, :, 0:h + rf, w - rf:2 * w + rf])[:, :, 0:h, rf:(rf + w)]
+            imMM = self.net_g_ema(self.lq[:, :, h - rf:2 * h + rf, w - rf:2 * w + rf])[:, :, rf:(rf + h), rf:(rf + w)]
+            imBM = self.net_g_ema(self.lq[:, :, 2 * h - rf:, w - rf:2 * w + rf])[:, :, rf:, rf:(rf + w)]
+            imTR = self.net_g_ema(self.lq[:, :, 0:h + rf, 2 * w - rf:])[:, :, 0:h, rf:]
+            imMR = self.net_g_ema(self.lq[:, :, h - rf:2 * h + rf, 2 * w - rf:])[:, :, rf:(rf + h), rf:]
+            imBR = self.net_g_ema(self.lq[:, :, 2 * h - rf:, 2 * w - rf:])[:, :, rf:, rf:]
 
         imT = torch.cat((imTL, imTM, imTR), 3)
         imM = torch.cat((imML, imMM, imMR), 3)
@@ -217,16 +228,60 @@ class UDCModel(BaseModel):
         output_cat = torch.cat((imT, imM, imB), 2)
         self.net_g_ema.train()
         return output_cat
-    
 
     def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
         if self.opt['rank'] == 0:
             self.nondist_validation(dataloader, current_iter, tb_logger, save_img)
 
     def nondist_validation(self, dataloader, current_iter, tb_logger, save_img):
+
+        def _clamp(tensor, clamp_opts):
+            if clamp_opts:
+                return torch.clamp(tensor, clamp_opts["min"], clamp_opts["max"])
+            return tensor
+
+        def _save_4ch_npy_to_img(img_npy, img_path, dng_info, in_pxl=255., max_pxl=1023.):
+            if dng_info is None:
+                raise RuntimeError(
+                    "DNG information for saving 4 channeled npy file not provided")
+            # npy file in hwc manner to cwh manner
+            data = rp.imread(dng_info)
+            npy = img_npy.transpose(2, 1, 0) / in_pxl * max_pxl
+
+            GR = data.raw_image[0::2, 0::2]
+            R = data.raw_image[0::2, 1::2]
+            B = data.raw_image[1::2, 0::2]
+            GB = data.raw_image[1::2, 1::2]
+            GB[:, :] = 0
+            B[:, :] = 0
+            R[:, :] = 0
+            GR[:, :] = 0
+
+            w, h = npy.shape[1:]
+
+            GR[:w, :h] = npy[0][:w][:h]
+            R[:w, :h] = npy[1][:w][:h]
+            B[:w, :h] = npy[2][:w][:h]
+            GB[:w, :h] = npy[3][:w][:h]
+            newData = data.postprocess()
+            imageio.imsave(img_path, newData)
+
+        def _save_image(img_npy, img_path, max_pxl=1023., dng_info=None):
+            if img_npy.shape[2] == 3:
+                mmcv.imwrite(img_npy, img_path)
+            else:
+                _save_4ch_npy_to_img(
+                    img_npy, img_path, max_pxl=max_pxl, dng_info=dng_info)
+
         dataset_name = dataloader.dataset.opt['name']
         with_metrics = self.opt['val'].get('metrics') is not None
         use_pbar = self.opt['val'].get('pbar', False)
+
+
+        if save_img and not self.opt["is_train"]:
+            img_dirpath = osp.join(
+                self.opt['path']['visualization'], dataset_name)
+            os.makedirs(img_dirpath, exist_ok=True)
 
         if with_metrics:
             if not hasattr(self, 'metric_results'):  # only execute in the first run
@@ -240,6 +295,17 @@ class UDCModel(BaseModel):
         metric_data = dict()
         if use_pbar:
             pbar = tqdm(total=len(dataloader), unit='image')
+        
+
+        clamp_opts = self.opt['val'].get("clamp")
+        dng_info = self.opt["val"].get("dng_info")
+        max_pxl = self.opt["val"].get("max_pxl", 1023.)
+
+
+        _logger = get_root_logger()
+        exp_name = self.opt["name"]
+        save_img_ratio = self.opt["val"].get("save_img_ratio")
+        psnrs = []
 
         for idx, val_data in enumerate(dataloader):
             img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
@@ -247,19 +313,11 @@ class UDCModel(BaseModel):
             self.test()
 
             visuals = self.get_current_visuals()
-            sr_npy_0 = np.array((visuals['result']))
-            sr_npy = sr_npy_0.copy()
-            sr_npy = np.clip(sr_npy, 0, 500)
-            sr_img_metric = visuals['result'].clone()
-            sr_img_metric = torch.clamp(sr_img_metric, 0, 500)
-            sr_img_metric = tone_map(sr_img_metric)
-            sr_img_metric = tensor2img([sr_img_metric])
-            sr_img = tensor2img([tone_map(torch.clamp(visuals['result'], 0, 500))])
-            metric_data['img'] = sr_img_metric
+            sr_img = tensor2img([visuals["result"]])
+            metric_data['img'] = sr_img
             if 'gt' in visuals:
-                gt_img_metric = tone_map(visuals['gt']).clone()
-                gt_img_metric = tensor2img([gt_img_metric])
-                gt_img = tensor2img([visuals['gt']])
+                gt_img_metric = tensor2img(visuals['gt'])
+                # gt_img = tensor2img([visuals['gt']])
                 metric_data['img2'] = gt_img_metric
                 del self.gt
 
@@ -268,24 +326,39 @@ class UDCModel(BaseModel):
             del self.output
             torch.cuda.empty_cache()
 
-            if save_img :
-                if self.opt['is_train']:
-                    save_img_path = osp.join(self.opt['path']['visualization'], img_name,
-                                             f'{img_name}_{current_iter}.png')
-                else:
-                    if self.opt['val']['suffix']:
-                        save_img_path = osp.join(self.opt['path']['visualization'], dataset_name,
-                                                 f'{img_name}_{self.opt["val"]["suffix"]}.png')
-                    else:
-                        save_img_path = osp.join(self.opt['path']['visualization'], dataset_name,
-                                                 f'{img_name}_{self.opt["name"]}.png')
-
-                imwrite(sr_img, save_img_path)
+            image_metric = {}
 
             if with_metrics:
                 # calculate metrics
                 for name, opt_ in self.opt['val']['metrics'].items():
-                    self.metric_results[name] += calculate_metric(metric_data, opt_)
+                    _metric = calculate_metric(metric_data, opt_)
+                    self.metric_results[name] += _metric
+                    image_metric[name] = _metric
+                    if name == "psnr":
+                        psnrs.append(_metric)
+            metric_message = f"{img_name}_{image_metric.get('psnr', 0)}_{image_metric.get('ssim',0)}"
+            _logger.info(metric_message)
+
+            if save_img:
+                if self.opt['is_train']:
+                    if random() < save_img_ratio:
+                        imgdir = osp.join(self.opt['path']['visualization'],
+                                        img_name)
+                        os.makedirs(imgdir, exist_ok=True)
+                        save_img_path = osp.join(
+                            imgdir, f'{img_name}_{current_iter}.png')
+                        _save_image(sr_img, save_img_path,
+                            max_pxl=max_pxl, dng_info=dng_info)
+                else:
+                    if self.opt['val']['suffix']:
+                        save_img_path = osp.join(img_dirpath,
+                                                 f'{metric_message}_{self.opt["val"]["suffix"]}.png')
+                    else:
+                        save_img_path = osp.join(img_dirpath,
+                                                 f'{metric_message}_{self.opt["name"]}.png')
+                    _save_image(sr_img, save_img_path,max_pxl=max_pxl, dng_info=dng_info)
+
+
             if use_pbar:
                 pbar.update(1)
                 pbar.set_description(f'Test {img_name}')
@@ -299,7 +372,8 @@ class UDCModel(BaseModel):
                 self._update_best_metric_result(dataset_name, metric, self.metric_results[metric], current_iter)
 
             self._log_validation_metric_values(current_iter, dataset_name, tb_logger)
-
+            log = f"{max(psnrs)} {sum(psnrs)/len(psnrs)} {len(psnrs)}"
+            _logger.info(log)
 
     def _log_validation_metric_values(self, current_iter, dataset_name, tb_logger):
         log_str = f'Validation {dataset_name}\n'
@@ -317,7 +391,7 @@ class UDCModel(BaseModel):
                 tb_logger.add_scalar(f'metrics/{dataset_name}/{metric}', value, current_iter)
         if self._adhoc_csv_enabled():
             self._log_csv(current_iter)
-    
+
     def _log_csv(self, current_iter):
         line = f"{current_iter}"
         for metric in self.metric_names:
@@ -325,8 +399,6 @@ class UDCModel(BaseModel):
             line += f",{value:.6f}"
         with open(self.__ad_hoc_csv_filename, "a") as f:
             f.write("\n" + line)
-        
-
 
     def get_current_visuals(self):
         out_dict = OrderedDict()
@@ -353,13 +425,12 @@ class UDCModel(BaseModel):
         header = "iter,"
         for metric_name in self.metric_names:
             header += f"{metric_name},"
-        
+
         header = header[:-1]
-        
+
         with open(filename, "w") as f:
             f.write(header)
             self.__ad_hoc_csv_filename = filename
-            
+
     def _adhoc_csv_enabled(self):
         return self.opt.get("ad_hoc_logger", False) and self.opt["ad_hoc_logger"].get("type", False) == "csv"
-

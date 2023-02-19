@@ -15,7 +15,7 @@ class UDCUNet(nn.Module):
         super(UDCUNet, self).__init__()
         self.DyK_size = DyK_size
 
-        ### Condition
+        # Condition
         basic_Res = functools.partial(arch_util.ResidualBlockNoBN, nf=nf)
 
         self.cond_head = nn.Sequential(nn.Conv2d(in_nc, nf, 3, 1, 1), nn.LeakyReLU(0.2, True))
@@ -41,7 +41,7 @@ class UDCUNet(nn.Module):
                                       nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
                                       nn.Conv2d(nf, nf * 8, 1))
 
-        ## Kernel
+        # Kernel
 
         self.k_head = nn.Sequential(nn.Conv2d(in_nc + 5, nf, 3, 1, 1), nn.LeakyReLU(0.2, True))
         self.k_first = arch_util.make_layer_unet(basic_Res, 2)
@@ -66,7 +66,7 @@ class UDCUNet(nn.Module):
                                    nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
                                    nn.Conv2d(nf, nf * 8 * self.DyK_size * self.DyK_size, 1))
 
-        ## Base
+        # Base
         self.conv_first = nn.Sequential(nn.Conv2d(in_nc, nf, 3, 1, 1), nn.LeakyReLU(0.2, True))
         basic_block = functools.partial(arch_util.ResBlock_with_SFT, nf=nf, in_nc=nf, out_nc=nf)
         basic_block2 = functools.partial(arch_util.ResBlock_with_SFT, nf=nf * 2, in_nc=nf * 2, out_nc=nf * 2)
@@ -101,7 +101,7 @@ class UDCUNet(nn.Module):
 
         psf = psf.expand(x.shape[0], -1, x.shape[2], x.shape[3]).cuda()
         k_fea = torch.cat((x, psf), 1)
-        
+
         k_fea = self.k_first(self.k_head(k_fea))
         kernel0 = self.KNet0(k_fea)
         kernel1 = self.KNet1(k_fea)
@@ -124,7 +124,7 @@ class UDCUNet(nn.Module):
 
         fea2, _ = self.enconv_layer2((down1, cond2))
         down2 = self.down_conv2(fea2)
-        
+
         feaB, _ = self.Bottom_conv((down2, cond3))
         feaB = feaB + kernel2d_conv(down2, kernel3, self.DyK_size)
 

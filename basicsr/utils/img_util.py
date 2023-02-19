@@ -35,7 +35,7 @@ def img2tensor(imgs, bgr2rgb=True, float32=True):
         return _totensor(imgs, bgr2rgb, float32)
 
 
-def tensor2img(tensor, rgb2bgr=True, out_type=np.uint8, min_max=(0, 1)):
+def tensor2img(tensor, rgb2bgr=False, out_type=np.uint8, min_max=(0, 1)):
     """Convert torch Tensors into image numpy arrays.
 
     After clamping to [min, max], values will be normalized to [0, 1].

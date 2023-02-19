@@ -63,17 +63,12 @@ class PairedImgPSFNpyDataset(data.Dataset):
 
         self.paths = []
         for folder_name, folder_opt in opt['folders'].items():
-            self.gt_folder, self.lq_folder = folder_opt['dataroot_gt'], folder_opt['dataroot_lq']
-            self.paths = paired_paths_from_folder([self.lq_folder, self.gt_folder], ['lq', 'gt'], self.filename_tmpl)
-            # assert folder_opt['meta_info_file'] is not None, ('Only support loading image\
-            #             and PSF by meta info file.')
-            # gt_folder, lq_folder = folder_opt['dataroot_gt'], folder_opt['dataroot_lq']
-            #
-            # self.paths += paired_paths_PSF_from_meta_info_file(
-            #                 [lq_folder, gt_folder], ['lq', 'gt'],
-            #                 folder_opt['meta_info_file'], self.filename_tmpl)
+            gt_folder, lq_folder = folder_opt['dataroot_gt'], folder_opt['dataroot_lq']
+            self.paths += paired_paths_from_meta_info_file(
+                            [lq_folder, gt_folder], ['lq', 'gt'],
+                            folder_opt['meta_info_file'], self.filename_tmpl)
 
-    def _tonemap(self, x, type='simple'):
+    def _tonemap(self, x, type='simple', range=1023.):
         if type == 'mu_law':
             norm_x = x / x.max()
             mapped_x = np.log(1 + 10000 * norm_x) / np.log(1 + 10000)
@@ -81,6 +76,8 @@ class PairedImgPSFNpyDataset(data.Dataset):
             mapped_x = x / (x + 0.25)
         elif type == 'same':
             mapped_x = x
+        elif type == "norm":
+            mapped_x = x / range
         else:
             raise NotImplementedError('tone mapping type [{:s}] is not recognized.'.format(type))
         return mapped_x
@@ -100,6 +97,9 @@ class PairedImgPSFNpyDataset(data.Dataset):
         scale = self.opt['scale']
         lq_map_type = self.opt['lq_map_type']
         gt_map_type = self.opt['gt_map_type']
+        lq_map_range = self.opt.get("lq_map_range")
+        gt_map_range = self.opt.get("gt_map_range")
+        order = self.opt.get("order")
 
         crop_scale = self.opt.get('crop_scale', None)
 
@@ -112,11 +112,15 @@ class PairedImgPSFNpyDataset(data.Dataset):
         img_lq = self.file_client.get(lq_path)
         # psf_code = self.file_client.get(psf_path)
 
-        # tone mapping
-        img_lq = self._tonemap(img_lq, type=lq_map_type)
-        img_gt = self._tonemap(img_gt, type=gt_map_type)
+        if order == "cwh":
+            img_lq = img_lq.transpose(2, 1, 0)
+            img_gt = img_gt.transpose(2, 1, 0)
 
-        # expand dimension
+        # tone mapping
+        img_lq = self._tonemap(img_lq, type=lq_map_type, range=lq_map_range)
+        img_gt = self._tonemap(img_gt, type=gt_map_type, range=gt_map_range)
+
+       # expand dimension
         img_gt = self._expand_dim(img_gt)
         img_lq = self._expand_dim(img_lq)
 
