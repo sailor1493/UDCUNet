@@ -3,9 +3,11 @@ import numpy as np
 from torch.utils import data as data
 
 from basicsr.data.transforms import augment, paired_random_crop, totensor
-from basicsr.data.util import (paired_paths_from_meta_info_file,
-                               paired_paths_from_folder,
-                               paired_paths_from_lmdb)
+from basicsr.data.util import (
+    paired_paths_from_meta_info_file,
+    paired_paths_from_folder,
+    paired_paths_from_lmdb,
+)
 from basicsr.utils import FileClient
 from basicsr.utils.registry import DATASET_REGISTRY
 
@@ -47,61 +49,67 @@ class PairedNpyDataset(data.Dataset):
         self.opt = opt
         # file client (io backend)
         self.file_client = None
-        self.io_backend_opt = opt['io_backend']
+        self.io_backend_opt = opt["io_backend"]
 
-        self.gt_folder, self.lq_folder = opt['dataroot_gt'], opt['dataroot_lq']
-        if 'filename_tmpl' in opt:
-            self.filename_tmpl = opt['filename_tmpl']
+        self.gt_folder, self.lq_folder = opt["dataroot_gt"], opt["dataroot_lq"]
+        if "filename_tmpl" in opt:
+            self.filename_tmpl = opt["filename_tmpl"]
         else:
-            self.filename_tmpl = '{}'
+            self.filename_tmpl = "{}"
 
-        if self.io_backend_opt['type'] == 'lmdb':
-            self.io_backend_opt['db_paths'] = [self.lq_folder, self.gt_folder]
-            self.io_backend_opt['client_keys'] = ['lq', 'gt']
+        if self.io_backend_opt["type"] == "lmdb":
+            self.io_backend_opt["db_paths"] = [self.lq_folder, self.gt_folder]
+            self.io_backend_opt["client_keys"] = ["lq", "gt"]
             self.paths = paired_paths_from_lmdb(
-                [self.lq_folder, self.gt_folder], ['lq', 'gt'])
-        elif 'meta_info_file' in self.opt and self.opt[
-                'meta_info_file'] is not None:
+                [self.lq_folder, self.gt_folder], ["lq", "gt"]
+            )
+        elif "meta_info_file" in self.opt and self.opt["meta_info_file"] is not None:
             self.paths = paired_paths_from_meta_info_file(
-                [self.lq_folder, self.gt_folder], ['lq', 'gt'],
-                self.opt['meta_info_file'], self.filename_tmpl)
+                [self.lq_folder, self.gt_folder],
+                ["lq", "gt"],
+                self.opt["meta_info_file"],
+                self.filename_tmpl,
+            )
         else:
             self.paths = paired_paths_from_folder(
-                [self.lq_folder, self.gt_folder], ['lq', 'gt'],
-                self.filename_tmpl)
+                [self.lq_folder, self.gt_folder], ["lq", "gt"], self.filename_tmpl
+            )
 
-    def _tonemap(self, x, type='simple'):
-        if type == 'mu_law':
+    def _tonemap(self, x, type="simple"):
+        if type == "mu_law":
             norm_x = x / x.max()
             mapped_x = np.log(1 + 10000 * norm_x) / np.log(1 + 10000)
-        elif type == 'simple':
+        elif type == "simple":
             mapped_x = x / (x + 0.25)
-        elif type == 'same':
+        elif type == "same":
             mapped_x = x
         else:
-            raise NotImplementedError('tone mapping type [{:s}] is not recognized.'.format(type))
+            raise NotImplementedError(
+                "tone mapping type [{:s}] is not recognized.".format(type)
+            )
         return mapped_x
 
     def _expand_dim(self, x):
         # expand dimemsion if images are gray.
         if x.ndim == 2:
-            return x[:,:,None]
+            return x[:, :, None]
         else:
             return x
-        
+
     def __getitem__(self, index):
         if self.file_client is None:
             self.file_client = FileClient(
-                self.io_backend_opt.pop('type'), **self.io_backend_opt)
+                self.io_backend_opt.pop("type"), **self.io_backend_opt
+            )
 
-        scale = self.opt['scale']
-        lq_map_type = self.opt['lq_map_type']
-        gt_map_type = self.opt['gt_map_type']
+        scale = self.opt["scale"]
+        lq_map_type = self.opt["lq_map_type"]
+        gt_map_type = self.opt["gt_map_type"]
 
         # Load gt and lq images. Dimension order: HWC; channel order: RGGB;
         # HDR image range: [0, +inf], float32.
-        gt_path = self.paths[index]['gt_path']
-        lq_path = self.paths[index]['lq_path']
+        gt_path = self.paths[index]["gt_path"]
+        lq_path = self.paths[index]["lq_path"]
         img_gt = self.file_client.get(gt_path)
         img_lq = self.file_client.get(lq_path)
 
@@ -114,25 +122,20 @@ class PairedNpyDataset(data.Dataset):
         img_lq = self._expand_dim(img_lq)
 
         # augmentation
-        if self.opt['phase'] == 'train':
-            gt_size = self.opt['gt_size']
+        if self.opt["phase"] == "train":
+            gt_size = self.opt["gt_size"]
             # random crop
-            img_gt, img_lq = paired_random_crop(img_gt, img_lq, gt_size, scale,
-                                                gt_path)
+            img_gt, img_lq = paired_random_crop(img_gt, img_lq, gt_size, scale, gt_path)
             # flip, rotation
-            img_gt, img_lq = augment([img_gt, img_lq], self.opt['use_flip'],
-                                     self.opt['use_rot'])
+            img_gt, img_lq = augment(
+                [img_gt, img_lq], self.opt["use_flip"], self.opt["use_rot"]
+            )
 
         # TODO: color space transform
         # BGR to RGB, HWC to CHW, numpy to tensor
         img_gt, img_lq = totensor([img_gt, img_lq], bgr2rgb=False, float32=True)
 
-        return {
-            'lq': img_lq,
-            'gt': img_gt,
-            'lq_path': lq_path,
-            'gt_path': gt_path
-        }
+        return {"lq": img_lq, "gt": img_gt, "lq_path": lq_path, "gt_path": gt_path}
 
     def __len__(self):
         return len(self.paths)

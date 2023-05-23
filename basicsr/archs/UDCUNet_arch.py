@@ -10,68 +10,123 @@ import numpy
 
 @ARCH_REGISTRY.register()
 class UDCUNet(nn.Module):
-
-    def __init__(self, in_nc=3, out_nc=3, nf=32, depths=[2, 2, 2, 8, 2, 2, 2], DyK_size=3):
+    def __init__(
+        self, in_nc=3, out_nc=3, nf=32, depths=[2, 2, 2, 8, 2, 2, 2], DyK_size=3
+    ):
         super(UDCUNet, self).__init__()
         self.DyK_size = DyK_size
 
         ### Condition
         basic_Res = functools.partial(arch_util.ResidualBlockNoBN, nf=nf)
 
-        self.cond_head = nn.Sequential(nn.Conv2d(in_nc, nf, 3, 1, 1), nn.LeakyReLU(0.2, True))
+        self.cond_head = nn.Sequential(
+            nn.Conv2d(in_nc, nf, 3, 1, 1), nn.LeakyReLU(0.2, True)
+        )
         self.cond_first = arch_util.make_layer_unet(basic_Res, 2)
 
-        self.CondNet0 = nn.Sequential(nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf, 1))
+        self.CondNet0 = nn.Sequential(
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+        )
 
-        self.CondNet1 = nn.Sequential(nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf * 2, 1))
+        self.CondNet1 = nn.Sequential(
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf * 2, 1),
+        )
 
-        self.CondNet2 = nn.Sequential(nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf * 4, 1))
+        self.CondNet2 = nn.Sequential(
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf * 4, 1),
+        )
 
-        self.CondNet3 = nn.Sequential(nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                      nn.Conv2d(nf, nf * 8, 1))
+        self.CondNet3 = nn.Sequential(
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf * 8, 1),
+        )
 
         ## Kernel
 
-        self.k_head = nn.Sequential(nn.Conv2d(in_nc + 5, nf, 3, 1, 1), nn.LeakyReLU(0.2, True))
+        self.k_head = nn.Sequential(
+            nn.Conv2d(in_nc + 5, nf, 3, 1, 1), nn.LeakyReLU(0.2, True)
+        )
         self.k_first = arch_util.make_layer_unet(basic_Res, 2)
 
-        self.KNet0 = nn.Sequential(nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf * self.DyK_size * self.DyK_size, 1))
+        self.KNet0 = nn.Sequential(
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf * self.DyK_size * self.DyK_size, 1),
+        )
 
-        self.KNet1 = nn.Sequential(nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf * 2 * self.DyK_size * self.DyK_size, 1))
+        self.KNet1 = nn.Sequential(
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf * 2 * self.DyK_size * self.DyK_size, 1),
+        )
 
-        self.KNet2 = nn.Sequential(nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf * 4 * self.DyK_size * self.DyK_size, 1))
+        self.KNet2 = nn.Sequential(
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf * 4 * self.DyK_size * self.DyK_size, 1),
+        )
 
-        self.KNet3 = nn.Sequential(nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf, 3, 2, 1), nn.LeakyReLU(0.2, True),
-                                   nn.Conv2d(nf, nf * 8 * self.DyK_size * self.DyK_size, 1))
+        self.KNet3 = nn.Sequential(
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf, 3, 2, 1),
+            nn.LeakyReLU(0.2, True),
+            nn.Conv2d(nf, nf * 8 * self.DyK_size * self.DyK_size, 1),
+        )
 
         ## Base
-        self.conv_first = nn.Sequential(nn.Conv2d(in_nc, nf, 3, 1, 1), nn.LeakyReLU(0.2, True))
-        basic_block = functools.partial(arch_util.ResBlock_with_SFT, nf=nf, in_nc=nf, out_nc=nf)
-        basic_block2 = functools.partial(arch_util.ResBlock_with_SFT, nf=nf * 2, in_nc=nf * 2, out_nc=nf * 2)
-        basic_block4 = functools.partial(arch_util.ResBlock_with_SFT, nf=nf * 4, in_nc=nf * 4, out_nc=nf * 4)
-        basic_block8 = functools.partial(arch_util.ResBlock_with_SFT, nf=nf * 8, in_nc=nf * 8, out_nc=nf * 8)
+        self.conv_first = nn.Sequential(
+            nn.Conv2d(in_nc, nf, 3, 1, 1), nn.LeakyReLU(0.2, True)
+        )
+        basic_block = functools.partial(
+            arch_util.ResBlock_with_SFT, nf=nf, in_nc=nf, out_nc=nf
+        )
+        basic_block2 = functools.partial(
+            arch_util.ResBlock_with_SFT, nf=nf * 2, in_nc=nf * 2, out_nc=nf * 2
+        )
+        basic_block4 = functools.partial(
+            arch_util.ResBlock_with_SFT, nf=nf * 4, in_nc=nf * 4, out_nc=nf * 4
+        )
+        basic_block8 = functools.partial(
+            arch_util.ResBlock_with_SFT, nf=nf * 8, in_nc=nf * 8, out_nc=nf * 8
+        )
 
         self.enconv_layer0 = arch_util.make_layer(basic_block, depths[0])
         self.down_conv0 = nn.Conv2d(nf, nf * 2, 3, 2, 1)
@@ -84,24 +139,32 @@ class UDCUNet(nn.Module):
 
         self.Bottom_conv = arch_util.make_layer(basic_block8, depths[3])
 
-        self.up_conv2 = nn.Sequential(nn.Conv2d(nf * 8, nf * 4 * 4, 3, 1, 1), nn.PixelShuffle(2))
+        self.up_conv2 = nn.Sequential(
+            nn.Conv2d(nf * 8, nf * 4 * 4, 3, 1, 1), nn.PixelShuffle(2)
+        )
         self.deconv_layer2 = arch_util.make_layer(basic_block4, depths[4])
 
-        self.up_conv1 = nn.Sequential(nn.Conv2d(nf * 4, nf * 2 * 4, 3, 1, 1), nn.PixelShuffle(2))
+        self.up_conv1 = nn.Sequential(
+            nn.Conv2d(nf * 4, nf * 2 * 4, 3, 1, 1), nn.PixelShuffle(2)
+        )
         self.deconv_layer1 = arch_util.make_layer(basic_block2, depths[5])
 
-        self.up_conv0 = nn.Sequential(nn.Conv2d(nf * 2, nf * 4, 3, 1, 1), nn.PixelShuffle(2))
+        self.up_conv0 = nn.Sequential(
+            nn.Conv2d(nf * 2, nf * 4, 3, 1, 1), nn.PixelShuffle(2)
+        )
         self.deconv_layer0 = arch_util.make_layer(basic_block, depths[6])
 
         self.conv_last = nn.Conv2d(nf, out_nc, 3, 1, 1, bias=True)
 
     def forward(self, x):
-        psf = numpy.float32(numpy.array([-0.0020, 0.0352, -2.0215e-05, 0.0060, 9.4328e-05]))
+        psf = numpy.float32(
+            numpy.array([-0.0020, 0.0352, -2.0215e-05, 0.0060, 9.4328e-05])
+        )
         psf = torch.from_numpy(psf).view(1, 5, 1, 1)
 
         psf = psf.expand(x.shape[0], -1, x.shape[2], x.shape[3]).cuda()
         k_fea = torch.cat((x, psf), 1)
-        
+
         k_fea = self.k_first(self.k_head(k_fea))
         kernel0 = self.KNet0(k_fea)
         kernel1 = self.KNet1(k_fea)
@@ -124,7 +187,7 @@ class UDCUNet(nn.Module):
 
         fea2, _ = self.enconv_layer2((down1, cond2))
         down2 = self.down_conv2(fea2)
-        
+
         feaB, _ = self.Bottom_conv((down2, cond3))
         feaB = feaB + kernel2d_conv(down2, kernel3, self.DyK_size)
 

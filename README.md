@@ -1,13 +1,18 @@
-## Environment
-- Python >= 3.7
-- PyTorch >= 1.7 
-- NVIDIA GPU + CUDA
+# ECFNet Integration to Other Training Framework
 
-### Installation
+## Installation
+
+We use `conda` for package management
+
 ```
+conda install python=3.9 -y
+conda install pytorch==2.0.1 torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia -y
+
+# from here we do not strictly manage package dependencies
 pip install -r requirements.txt
 python setup.py develop
 ```
+
 ## How To Inference or Test
 - Refer to ./options/test for the configuration file of the model to be tested.  
 - Download the pretrained model from [Google Drive](https://drive.google.com/file/d/1cslBiWi1UY33pvhvFLjsb6baTP9z1Pud/view?usp=sharing) and put it into ./experiments/UDCUNet_4gpu_pretrained/models .

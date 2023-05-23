@@ -2,8 +2,11 @@ import torch
 from torchinfo import summary
 import numpy as np
 
-def get_gmacs_and_params(model, input_size=(1, 3, 6, 1060, 1900), print_detailed_breakdown=False):
-    """ This function calculates the total MACs and Parameters of a given pytorch model.
+
+def get_gmacs_and_params(
+    model, input_size=(1, 3, 6, 1060, 1900), print_detailed_breakdown=False
+):
+    """This function calculates the total MACs and Parameters of a given pytorch model.
 
     Args:
         model: A pytorch model object
@@ -14,12 +17,15 @@ def get_gmacs_and_params(model, input_size=(1, 3, 6, 1060, 1900), print_detailed
         total_params: The total number of parameters in the model
 
     """
-    model_summary = summary(model, input_size=input_size, verbose=2 if print_detailed_breakdown else 0)
+    model_summary = summary(
+        model, input_size=input_size, verbose=2 if print_detailed_breakdown else 0
+    )
 
-    return model_summary.total_mult_adds/10**9, model_summary.total_params
+    return model_summary.total_mult_adds / 10**9, model_summary.total_params
+
 
 def get_runtime(model, input_size=(1, 3, 6, 1060, 1900), num_reps=100):
-    """ This function calculates the mean runtime of a given pytorch model.
+    """This function calculates the mean runtime of a given pytorch model.
     More info: https://deci.ai/resources/blog/measure-inference-time-deep-neural-networks/
 
     Args:
@@ -37,8 +43,10 @@ def get_runtime(model, input_size=(1, 3, 6, 1060, 1900), num_reps=100):
     # Define input, for this example we will use a random dummy input
     input = torch.randn(input_size, dtype=torch.float).to(device)
     # Define start and stop cuda events
-    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
-    times=np.zeros((num_reps, 1))
+    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(
+        enable_timing=True
+    )
+    times = np.zeros((num_reps, 1))
     # Perform warm-up runs (that are normally slower)
     for _ in range(10):
         _ = model(input)
@@ -51,7 +59,7 @@ def get_runtime(model, input_size=(1, 3, 6, 1060, 1900), num_reps=100):
             # Await for GPU to finish the job and sync
             torch.cuda.synchronize()
             curr_time = starter.elapsed_time(ender)
-            times[it] = curr_time / 1000 # Convert from miliseconds to seconds
+            times[it] = curr_time / 1000  # Convert from miliseconds to seconds
     # Average all measured times
     mean_runtime = np.sum(times) / num_reps
     return mean_runtime

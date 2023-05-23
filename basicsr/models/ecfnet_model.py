@@ -4,6 +4,9 @@ from os import path as osp
 from tqdm import tqdm
 import os
 import math
+from typing import List
+import torch.nn.functional as F
+
 
 from basicsr.archs import build_network
 from basicsr.losses import build_loss
@@ -28,56 +31,41 @@ def tone_map(x, c=0.25):
 
 
 @MODEL_REGISTRY.register()
-class UDCModel(BaseModel):
+class ECFNet(BaseModel):
     """Base SR model for single image super-resolution."""
 
     def __init__(self, opt):
-        super(UDCModel, self).__init__(opt)
+        super(ECFNet, self).__init__(opt)
 
         # define network
-        self.net_g = build_network(opt["network_g"])
-        self.net_g = self.model_to_device(self.net_g)
-        self.print_network(self.net_g)
+        self.net = build_network(opt["network"])
+        self.net = self.model_to_device(self.net)
+        self.print_network(self.net)
         # torchinfo.summary(self.net_g, (8, 3, 256, 256))
 
         # load pretrained models
-        load_path = self.opt["path"].get("pretrain_network_g", None)
+        load_path = self.opt["path"].get("pretrain_network", None)
         if load_path is not None:
-            param_key = self.opt["path"].get("param_key_g", "params")
+            param_key = self.opt["path"].get("param_key", "params")
             self.load_network(
-                self.net_g,
+                self.net,
                 load_path,
-                self.opt["path"].get("strict_load_g", True),
+                self.opt["path"].get("strict_load", True),
                 param_key,
             )
 
         if self.is_train:
             self.init_training_settings()
 
-    def init_training_settings(self):
-        self.net_g.train()
-        train_opt = self.opt["train"]
+    def __interpolate(self, x: torch.Tensor) -> List[torch.Tensor]:
+        x_2 = F.interpolate(x, scale_factor=0.5)  # 1, 4, 128, 128
+        x_4 = F.interpolate(x_2, scale_factor=0.5)  # 1, 4, 64, 64
+        x_8 = F.interpolate(x_4, scale_factor=0.5)  # 1, 4, 32, 32
+        return [x_8, x_4, x_2, x]
 
-        self.ema_decay = train_opt.get("ema_decay", 0)
-        if self.ema_decay > 0:
-            logger = get_root_logger()
-            logger.info(f"Use Exponential Moving Average with decay: {self.ema_decay}")
-            # define network net_g with Exponential Moving Average (EMA)
-            # net_g_ema is used only for testing on one GPU and saving
-            # There is no need to wrap with DistributedDataParallel
-            self.net_g_ema = build_network(self.opt["network_g"]).to(self.device)
-            # load pretrained model
-            load_path = self.opt["path"].get("pretrain_network_g", None)
-            if load_path is not None:
-                self.load_network(
-                    self.net_g_ema,
-                    load_path,
-                    self.opt["path"].get("strict_load_g", True),
-                    "params_ema",
-                )
-            else:
-                self.model_ema(0)  # copy net_g weight
-            self.net_g_ema.eval()
+    def init_training_settings(self):
+        self.net.train()
+        train_opt = self.opt["train"]
 
         # define losses
         if train_opt.get("pixel_opt"):
@@ -105,18 +93,18 @@ class UDCModel(BaseModel):
     def setup_optimizers(self):
         train_opt = self.opt["train"]
         optim_params = []
-        for k, v in self.net_g.named_parameters():
+        for k, v in self.net.named_parameters():
             if v.requires_grad:
                 optim_params.append(v)
             else:
                 logger = get_root_logger()
                 logger.warning(f"Params {k} will not be optimized.")
 
-        optim_type = train_opt["optim_g"].pop("type")
-        self.optimizer_g = self.get_optimizer(
-            optim_type, optim_params, **train_opt["optim_g"]
+        optim_type = train_opt["optim"].pop("type")
+        self.optimizer = self.get_optimizer(
+            optim_type, optim_params, **train_opt["optim"]
         )
-        self.optimizers.append(self.optimizer_g)
+        self.optimizers.append(self.optimizer)
 
     def feed_data(self, data):
         self.lq = data["lq"].to(self.device)
@@ -124,204 +112,80 @@ class UDCModel(BaseModel):
             self.gt = data["gt"].to(self.device)
 
     def optimize_parameters(self, current_iter):
-        self.optimizer_g.zero_grad()
-        self.output = self.net_g(self.lq)  # here we run forward pass
+        self.optimizer.zero_grad()
+        self.output = self.net(self.lq)
+        self.gt = self.__interpolate(self.gt)
 
         l_total = 0
         loss_dict = OrderedDict()
         # pixel loss
         if self.cri_pix:
-            l_pix = self.cri_pix(self.output, self.gt)
+            l_pix = 0
+            l_pix = sum([self.cri_pix(x, y) for x, y in zip(self.output, self.gt)])
             l_total += l_pix
             loss_dict["l_pix"] = l_pix
         # perceptual loss
         if self.cri_perceptual:
-            l_percep, l_style = self.cri_perceptual(self.output, self.gt)
-            if l_percep is not None:
-                l_total += l_percep
-                loss_dict["l_percep"] = l_percep
-            if l_style is not None:
-                l_total += l_style
-                loss_dict["l_style"] = l_style
+            raise NotImplementedError("Do not use cri_perceptual option")
 
         l_total.backward()
-        self.optimizer_g.step()
+        self.optimizer.step()
 
         self.log_dict = self.reduce_loss_dict(loss_dict)
 
-        if self.ema_decay > 0:
-            self.model_ema(decay=self.ema_decay)
-
     def test(self):
-        N, C, H, W = self.lq.shape
-        # if H > 1000 or W > 1000:
-        #   self.output = self.test_crop9()
-        if hasattr(self, "net_g_ema"):
-            self.net_g_ema.eval()
+        _, _, H, W = self.lq.shape
+        if H > 1000 or W > 1000:
             with torch.no_grad():
-                self.output = self.net_g_ema(self.lq)
-            self.net_g_ema.train()
-        else:
-            self.net_g.eval()
-            with torch.no_grad():
-                self.output = self.net_g(self.lq)
-            self.net_g.train()
+                self.output = self.test_crop_net()
 
-    def test_crop9(self):
-        if hasattr(self, "net_g_ema"):
-            return self.test_crop_ema()
-        else:
-            return self.test_crop_netg()
-
-    def calculate_crop(self, shape):
-        _, _, H, W = shape
-        h, w = math.ceil(H / 3), math.ceil(W / 3)
-        rf = 30
-        return (
-            (h, w, rf),
-            (0, self.down(h + rf), 0, self.down(w + rf)),
-            (self.down(h - rf), self.down(2 * h + rf), 0, self.down(w + rf)),
-            (self.down(2 * h - rf), H, 0, self.down(w + rf)),
-            (0, self.down(h + rf), self.down(w - rf), self.down(2 * w + rf)),
-            (
-                self.down(h - rf),
-                self.down(2 * h + rf),
-                self.down(w - rf),
-                self.down(2 * w + rf),
-            ),
-            (self.down(2 * h - rf), H, self.down(w - rf), self.down(2 * w + rf)),
-            (0, self.down(h + rf), self.down(2 * w - rf), W),
-            (self.down(h - rf), self.down(2 * h + rf), self.down(2 * w - rf), W),
-            (self.down(2 * h - rf), H, self.down(2 * w - rf), W),
-        )
-
-    def down(self, number, divisor=8):
-        return (number // divisor) * divisor
-
-    def test_crop_netg(self):
-        self.net_g.eval()
-        calculated = self.calculate_crop(self.lq.shape)
-        h, w, rf = calculated[0]
-
+        self.net.eval()
         with torch.no_grad():
-            imTL = self.net_g(
-                self.lq[
-                    :,
-                    :,
-                    calculated[1][0] : calculated[1][1],
-                    calculated[1][2] : calculated[1][3],
-                ]
-            )[:, :, 0:h, 0:w]
-            imML = self.net_g(
-                self.lq[
-                    :,
-                    :,
-                    calculated[2][0] : calculated[2][1],
-                    calculated[2][2] : calculated[2][3],
-                ]
-            )[:, :, rf : (rf + h), 0:w]
-            imBL = self.net_g(
-                self.lq[
-                    :,
-                    :,
-                    calculated[3][0] : calculated[3][1],
-                    calculated[3][2] : calculated[3][3],
-                ]
-            )[:, :, rf:, 0:w]
-            imTM = self.net_g(
-                self.lq[
-                    :,
-                    :,
-                    calculated[4][0] : calculated[4][1],
-                    calculated[4][2] : calculated[4][3],
-                ]
-            )[:, :, 0:h, rf : (rf + w)]
-            imMM = self.net_g(
-                self.lq[
-                    :,
-                    :,
-                    calculated[5][0] : calculated[5][1],
-                    calculated[5][2] : calculated[5][3],
-                ]
-            )[:, :, rf : (rf + h), rf : (rf + w)]
-            imBM = self.net_g(
-                self.lq[
-                    :,
-                    :,
-                    calculated[6][0] : calculated[6][1],
-                    calculated[6][2] : calculated[6][3],
-                ]
-            )[:, :, rf:, rf : (rf + w)]
-            imTR = self.net_g(
-                self.lq[
-                    :,
-                    :,
-                    calculated[7][0] : calculated[7][1],
-                    calculated[7][2] : calculated[7][3],
-                ]
-            )[:, :, 0:h, rf:]
-            imMR = self.net_g(
-                self.lq[
-                    :,
-                    :,
-                    calculated[8][0] : calculated[8][1],
-                    calculated[8][2] : calculated[8][3],
-                ]
-            )[:, :, rf : (rf + h), rf:]
-            imBR = self.net_g(
-                self.lq[
-                    :,
-                    :,
-                    calculated[9][0] : calculated[9][1],
-                    calculated[9][2] : calculated[9][3],
-                ]
-            )[:, :, rf:, rf:]
+            self.output = self.net(self.lq)[-1]
+        self.net.train()
+   
 
-        imT = torch.cat((imTL, imTM, imTR), 3)
-        imM = torch.cat((imML, imMM, imMR), 3)
-        imB = torch.cat((imBL, imBM, imBR), 3)
-        output_cat = torch.cat((imT, imM, imB), 2)
-        self.net_g.train()
-        return output_cat
+    def test_crop_net(self):
+        self.net.eval()
+        _, _, H, W = self.lq.shape
 
-    def test_crop_ema(self):
-        self.net_g_ema.eval()
-        N, C, H, W = self.lq.shape
-        h, w = math.ceil(H / 3), math.ceil(W / 3)
-        rf = 30
-        with torch.no_grad():
-            imTL = self.net_g_ema(self.lq[:, :, 0 : h + rf, 0 : w + rf])[:, :, 0:h, 0:w]
-            imML = self.net_g_ema(self.lq[:, :, h - rf : 2 * h + rf, 0 : w + rf])[
-                :, :, rf : (rf + h), 0:w
-            ]
-            imBL = self.net_g_ema(self.lq[:, :, 2 * h - rf :, 0 : w + rf])[
-                :, :, rf:, 0:w
-            ]
-            imTM = self.net_g_ema(self.lq[:, :, 0 : h + rf, w - rf : 2 * w + rf])[
-                :, :, 0:h, rf : (rf + w)
-            ]
-            imMM = self.net_g_ema(
-                self.lq[:, :, h - rf : 2 * h + rf, w - rf : 2 * w + rf]
-            )[:, :, rf : (rf + h), rf : (rf + w)]
-            imBM = self.net_g_ema(self.lq[:, :, 2 * h - rf :, w - rf : 2 * w + rf])[
-                :, :, rf:, rf : (rf + w)
-            ]
-            imTR = self.net_g_ema(self.lq[:, :, 0 : h + rf, 2 * w - rf :])[
-                :, :, 0:h, rf:
-            ]
-            imMR = self.net_g_ema(self.lq[:, :, h - rf : 2 * h + rf, 2 * w - rf :])[
-                :, :, rf : (rf + h), rf:
-            ]
-            imBR = self.net_g_ema(self.lq[:, :, 2 * h - rf :, 2 * w - rf :])[
-                :, :, rf:, rf:
-            ]
+        STEP = 512
+        IR = 32
+        crops = []
+        for row_start in range(0, H, STEP):
+            row_end = row_start + STEP
+            temp_rowstart = row_start - IR
+            row_offset_start = 0 if temp_rowstart < 0 else temp_rowstart
+            temp_rowend = row_end + IR
+            row_offset_end = H if temp_rowend >= H else temp_rowend
+            rowlist = list()
+            crops.append(rowlist)
+            for col_start in range(0, W, STEP):
+                col_end = col_start + STEP
+                temp_colstart = col_start - IR
+                col_offset_start = 0 if temp_colstart < 0 else temp_colstart
+                temp_colend = col_end + IR
+                col_offset_end = W if temp_colend > W else temp_colend
+                rowlist.append(
+                    self.net(
+                        self.lq[
+                            :,
+                            :,
+                            row_offset_start:row_offset_end,
+                            col_offset_start:col_offset_end,
+                        ]
+                    )[-1][
+                        :,
+                        :,
+                        row_start - row_offset_start : row_offset_end - row_end + STEP,
+                        col_start - col_offset_start : col_offset_end - col_end + STEP,
+                    ]
+                )
 
-        imT = torch.cat((imTL, imTM, imTR), 3)
-        imM = torch.cat((imML, imMM, imMR), 3)
-        imB = torch.cat((imBL, imBM, imBR), 3)
-        output_cat = torch.cat((imT, imM, imB), 2)
-        self.net_g_ema.train()
-        return output_cat
+        merged = [torch.cat(rowlist, 3) for rowlist in crops]
+        output = torch.cat(merged, 2)
+        self.net.train()
+        return output
 
     def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
         if self.opt["rank"] == 0:
@@ -367,12 +231,7 @@ class UDCModel(BaseModel):
             imageio.imsave(img_path, output)
 
         def _save_image(img_npy, img_path, max_pxl=1023.0, dng_info=None):
-            if img_npy.shape[2] == 3:
-                mmcv.imwrite(img_npy, img_path)
-            else:
-                _save_4ch_npy_to_img(
-                    img_npy, img_path, max_pxl=max_pxl, dng_info=dng_info
-                )
+            _save_4ch_npy_to_img(img_npy, img_path, max_pxl=max_pxl, dng_info=dng_info)
 
         dataset_name = dataloader.dataset.opt["name"]
         with_metrics = self.opt["val"].get("metrics") is not None
@@ -397,13 +256,11 @@ class UDCModel(BaseModel):
         if use_pbar:
             pbar = tqdm(total=len(dataloader), unit="image")
 
-        clamp_opts = self.opt["val"].get("clamp")
         dng_info = self.opt["val"].get("dng_info")
         max_pxl = self.opt["val"].get("max_pxl", 1023.0)
 
         _logger = get_root_logger()
-        exp_name = self.opt["name"]
-        save_img_ratio = self.opt["val"].get("save_img_ratio")
+        save_img_ratio = self.opt["val"].get("save_img_ratio", 1.1)
         psnrs = []
         save_npy = self.opt["val"].get("save_npy", False)
 
@@ -413,13 +270,15 @@ class UDCModel(BaseModel):
             self.test()
 
             visuals = self.get_current_visuals()
-            sr_img = tensor2img([visuals["result"]])
+            out_tensor = visuals["result"]
+            sr_img = tensor2img(out_tensor)
             metric_data["img"] = sr_img
             if "gt" in visuals:
                 gt_img_metric = tensor2img(visuals["gt"])
                 # gt_img = tensor2img([visuals['gt']])
                 metric_data["img2"] = gt_img_metric
                 del self.gt
+            
 
             # tentative for out of GPU memory
             del self.lq
@@ -508,11 +367,7 @@ class UDCModel(BaseModel):
 
         logger = get_root_logger()
         logger.info(log_str)
-        if tb_logger:
-            for metric, value in self.metric_results.items():
-                tb_logger.add_scalar(
-                    f"metrics/{dataset_name}/{metric}", value, current_iter
-                )
+
         if self._adhoc_csv_enabled():
             self._log_csv(current_iter)
 
@@ -528,20 +383,15 @@ class UDCModel(BaseModel):
         out_dict = OrderedDict()
         out_dict["lq"] = self.lq.detach().cpu()
         out_dict["result"] = self.output.detach().cpu()
+        # here we have 4-channeled output
+        # print(self.output.shape)
+        # print(self.lq.shape)
         if hasattr(self, "gt"):
             out_dict["gt"] = self.gt.detach().cpu()
         return out_dict
 
     def save(self, epoch, current_iter):
-        if hasattr(self, "net_g_ema"):
-            self.save_network(
-                [self.net_g, self.net_g_ema],
-                "net_g",
-                current_iter,
-                param_key=["params", "params_ema"],
-            )
-        else:
-            self.save_network(self.net_g, "net_g", current_iter)
+        self.save_network(self.net, "net", current_iter)
         self.save_training_state(epoch, current_iter)
 
     def init_csv_logger(self):

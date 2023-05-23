@@ -3,6 +3,7 @@ import mmcv
 import torch
 import numpy as np
 from torch.utils import data as data
+import torch.nn.functional as F
 
 from basicsr.data.transforms import augment, paired_random_crop, totensor
 from basicsr.data.util import (
@@ -14,15 +15,11 @@ from basicsr.data.util import (
 from basicsr.utils import FileClient
 from basicsr.utils.registry import DATASET_REGISTRY
 
-#
-# UDCUNet's PairedImgPSFNpyDataset is actually PairedImgNpyDataset in DISCNet
-# I guess they didn't read basicsr documentation.
-#
-
 
 @DATASET_REGISTRY.register()
-class PairedImgPSFNpyDataset(data.Dataset):
-    """Paired image dataset with its corresponding PSF.
+class ECFNetDataset(data.Dataset):
+    """
+    ECFNet uses its own dataloader
 
     Read LQ (Low Quality, e.g. LR (Low Resolution), blurry, noisy, etc)
     and GT image pairs.
@@ -80,7 +77,7 @@ class PairedImgPSFNpyDataset(data.Dataset):
             #                 [lq_folder, gt_folder], ['lq', 'gt'],
             #                 folder_opt['meta_info_file'], self.filename_tmpl)
 
-    def _tonemap(self, x, type="simple"):
+    def _tonemap(self, x, type="simple", map_range=1):
         if type == "mu_law":
             norm_x = x / x.max()
             mapped_x = np.log(1 + 10000 * norm_x) / np.log(1 + 10000)
@@ -88,6 +85,8 @@ class PairedImgPSFNpyDataset(data.Dataset):
             mapped_x = x / (x + 0.25)
         elif type == "same":
             mapped_x = x
+        elif type == "norm":
+            mapped_x = x / map_range
         else:
             raise NotImplementedError(
                 "tone mapping type [{:s}] is not recognized.".format(type)
@@ -110,6 +109,8 @@ class PairedImgPSFNpyDataset(data.Dataset):
         scale = self.opt["scale"]
         lq_map_type = self.opt["lq_map_type"]
         gt_map_type = self.opt["gt_map_type"]
+        lq_map_range = self.opt.get("lq_map_range", 1)
+        gt_map_range = self.opt.get("gt_map_range", 1)
 
         crop_scale = self.opt.get("crop_scale", None)
 
@@ -123,8 +124,8 @@ class PairedImgPSFNpyDataset(data.Dataset):
         # psf_code = self.file_client.get(psf_path)
 
         # tone mapping
-        img_lq = self._tonemap(img_lq, type=lq_map_type)
-        img_gt = self._tonemap(img_gt, type=gt_map_type)
+        img_lq = self._tonemap(img_lq, type=lq_map_type, map_range=lq_map_range)
+        img_gt = self._tonemap(img_gt, type=gt_map_type, map_range=gt_map_range)
 
         # expand dimension
         img_gt = self._expand_dim(img_gt)
@@ -157,15 +158,12 @@ class PairedImgPSFNpyDataset(data.Dataset):
         # TODO: color space transform
         # BGR to RGB, HWC to CHW, numpy to tensor
         img_gt, img_lq = totensor([img_gt, img_lq], bgr2rgb=False, float32=True)
-        # psf_code = torch.from_numpy(psf_code)[..., None, None]
 
         return {
             "lq": img_lq,
             "gt": img_gt,
-            # 'psf_code': psf_code,
             "lq_path": lq_path,
             "gt_path": gt_path,
-            # 'psf_path': psf_path,
         }
 
     def __len__(self):

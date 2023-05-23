@@ -17,9 +17,9 @@ def mod_crop(img, scale):
     if img.ndim in (2, 3):
         h, w = img.shape[0], img.shape[1]
         h_remainder, w_remainder = h % scale, w % scale
-        img = img[:h - h_remainder, :w - w_remainder, ...]
+        img = img[: h - h_remainder, : w - w_remainder, ...]
     else:
-        raise ValueError(f'Wrong img ndim: {img.ndim}.')
+        raise ValueError(f"Wrong img ndim: {img.ndim}.")
     return img
 
 
@@ -50,42 +50,57 @@ def paired_random_crop(img_gts, img_lqs, gt_patch_size, scale, gt_path=None):
         img_lqs = [img_lqs]
 
     # determine input type: Numpy array or Tensor
-    input_type = 'Tensor' if torch.is_tensor(img_gts[0]) else 'Numpy'
+    input_type = "Tensor" if torch.is_tensor(img_gts[0]) else "Numpy"
 
-    if input_type == 'Tensor':
+    if input_type == "Tensor":
         h_lq, w_lq = img_lqs[0].size()[-2:]
         h_gt, w_gt = img_gts[0].size()[-2:]
     else:
         h_lq, w_lq = img_lqs[0].shape[0:2]
         h_gt, w_gt = img_gts[0].shape[0:2]
-    
-        
+
     lq_patch_size = gt_patch_size // scale
 
     if h_gt != h_lq * scale or w_gt != w_lq * scale:
-        raise ValueError(f'Scale mismatches. GT ({h_gt}, {w_gt}) is not {scale}x ',
-                         f'multiplication of LQ ({h_lq}, {w_lq}).')
+        raise ValueError(
+            f"Scale mismatches. GT ({h_gt}, {w_gt}) is not {scale}x ",
+            f"multiplication of LQ ({h_lq}, {w_lq}).",
+        )
     if h_lq < lq_patch_size or w_lq < lq_patch_size:
-        raise ValueError(f'LQ ({h_lq}, {w_lq}) is smaller than patch size '
-                         f'({lq_patch_size}, {lq_patch_size}). '
-                         f'Please remove {gt_path}.')
+        raise ValueError(
+            f"LQ ({h_lq}, {w_lq}) is smaller than patch size "
+            f"({lq_patch_size}, {lq_patch_size}). "
+            f"Please remove {gt_path}."
+        )
 
     # randomly choose top and left coordinates for lq patch
     top = random.randint(0, h_lq - lq_patch_size)
     left = random.randint(0, w_lq - lq_patch_size)
 
     # crop lq patch
-    if input_type == 'Tensor':
-        img_lqs = [v[:, :, top:top + lq_patch_size, left:left + lq_patch_size] for v in img_lqs]
+    if input_type == "Tensor":
+        img_lqs = [
+            v[:, :, top : top + lq_patch_size, left : left + lq_patch_size]
+            for v in img_lqs
+        ]
     else:
-        img_lqs = [v[top:top + lq_patch_size, left:left + lq_patch_size, ...] for v in img_lqs]
+        img_lqs = [
+            v[top : top + lq_patch_size, left : left + lq_patch_size, ...]
+            for v in img_lqs
+        ]
 
     # crop corresponding gt patch
     top_gt, left_gt = int(top * scale), int(left * scale)
-    if input_type == 'Tensor':
-        img_gts = [v[:, :, top_gt:top_gt + gt_patch_size, left_gt:left_gt + gt_patch_size] for v in img_gts]
+    if input_type == "Tensor":
+        img_gts = [
+            v[:, :, top_gt : top_gt + gt_patch_size, left_gt : left_gt + gt_patch_size]
+            for v in img_gts
+        ]
     else:
-        img_gts = [v[top_gt:top_gt + gt_patch_size, left_gt:left_gt + gt_patch_size, ...] for v in img_gts]
+        img_gts = [
+            v[top_gt : top_gt + gt_patch_size, left_gt : left_gt + gt_patch_size, ...]
+            for v in img_gts
+        ]
     if len(img_gts) == 1:
         img_gts = img_gts[0]
     if len(img_lqs) == 1:
@@ -180,6 +195,7 @@ def img_rotate(img, angle, center=None, scale=1.0):
     rotated_img = cv2.warpAffine(img, matrix, (w, h))
     return rotated_img
 
+
 def multiple_random_crop(img_gts, img_lqs, img_atns, gt_patch_size, scale, gt_path):
     """multiple random crop.
 
@@ -214,12 +230,15 @@ def multiple_random_crop(img_gts, img_lqs, img_atns, gt_patch_size, scale, gt_pa
 
     if h_gt != h_lq * scale or w_gt != w_lq * scale:
         raise ValueError(
-            f'Scale mismatches. GT ({h_gt}, {w_gt}) is not {scale}x ',
-            f'multiplication of LQ ({h_lq}, {w_lq}).')
+            f"Scale mismatches. GT ({h_gt}, {w_gt}) is not {scale}x ",
+            f"multiplication of LQ ({h_lq}, {w_lq}).",
+        )
     if h_lq < lq_patch_size or w_lq < lq_patch_size:
-        raise ValueError(f'LQ ({h_lq}, {w_lq}) is smaller than patch size '
-                         f'({lq_patch_size}, {lq_patch_size}). '
-                         f'Please remove {gt_path}.')
+        raise ValueError(
+            f"LQ ({h_lq}, {w_lq}) is smaller than patch size "
+            f"({lq_patch_size}, {lq_patch_size}). "
+            f"Please remove {gt_path}."
+        )
 
     # randomly choose top and left coordinates for lq patch
     top = random.randint(0, h_lq - lq_patch_size)
@@ -227,20 +246,18 @@ def multiple_random_crop(img_gts, img_lqs, img_atns, gt_patch_size, scale, gt_pa
 
     # crop lq patch
     img_lqs = [
-        v[top:top + lq_patch_size, left:left + lq_patch_size, ...]
-        for v in img_lqs
+        v[top : top + lq_patch_size, left : left + lq_patch_size, ...] for v in img_lqs
     ]
 
     # crop atn patch
     img_atns = [
-        v[top:top + lq_patch_size, left:left + lq_patch_size, ...]
-        for v in img_atns
+        v[top : top + lq_patch_size, left : left + lq_patch_size, ...] for v in img_atns
     ]
 
     # crop corresponding gt patch
     top_gt, left_gt = int(top * scale), int(left * scale)
     img_gts = [
-        v[top_gt:top_gt + gt_patch_size, left_gt:left_gt + gt_patch_size, ...]
+        v[top_gt : top_gt + gt_patch_size, left_gt : left_gt + gt_patch_size, ...]
         for v in img_gts
     ]
     if len(img_gts) == 1:
@@ -274,22 +291,22 @@ def random_crop(img, patch_size):
     h, w, _ = img[0].shape
 
     if h < patch_size or w < patch_size:
-        raise ValueError(f'LQ ({h}, {w}) is smaller than patch size '
-                         f'({patch_size}, {patch_size}). ')
+        raise ValueError(
+            f"LQ ({h}, {w}) is smaller than patch size "
+            f"({patch_size}, {patch_size}). "
+        )
 
     # randomly choose top and left coordinates for lq patch
     top = random.randint(0, h - patch_size)
     left = random.randint(0, w - patch_size)
 
     # crop lq patch
-    img = [
-        v[top:top + patch_size, left:left + patch_size, :]
-        for v in img
-    ]
+    img = [v[top : top + patch_size, left : left + patch_size, :] for v in img]
 
     if len(img) == 1:
         img = img[0]
     return img
+
 
 def totensor(imgs, bgr2rgb=True, float32=True):
     """Numpy array to tensor.

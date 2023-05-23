@@ -8,7 +8,7 @@ from basicsr.archs.vgg_arch import VGGFeatureExtractor
 from basicsr.utils.registry import LOSS_REGISTRY
 from .loss_util import weighted_loss
 
-_reduction_modes = ['none', 'mean', 'sum']
+_reduction_modes = ["none", "mean", "sum"]
 
 
 def tone_map(x, c=0.25):
@@ -19,27 +19,28 @@ def tone_map(x, c=0.25):
 
 @weighted_loss
 def l1_loss(pred, target):
-    return F.l1_loss(pred, target, reduction='none')
+    return F.l1_loss(pred, target, reduction="none")
 
 
 @weighted_loss
 def mse_loss(pred, target):
-    return F.mse_loss(pred, target, reduction='none')
+    return F.mse_loss(pred, target, reduction="none")
 
 
 @weighted_loss
 def charbonnier_loss(pred, target, eps=1e-12):
-    return torch.sqrt((pred - target)**2 + eps)
+    return torch.sqrt((pred - target) ** 2 + eps)
 
 
 @LOSS_REGISTRY.register()
 class map_L1Loss(nn.Module):
     def __init__(self):
         super(map_L1Loss, self).__init__()
+
     def forward(self, x, y):
         loss = torch.mean(torch.abs(tone_map(x) - tone_map(y)))
         return loss
-    
+
 
 @LOSS_REGISTRY.register()
 class L1Loss(nn.Module):
@@ -51,10 +52,12 @@ class L1Loss(nn.Module):
             Supported choices are 'none' | 'mean' | 'sum'. Default: 'mean'.
     """
 
-    def __init__(self, loss_weight=1.0, reduction='mean'):
+    def __init__(self, loss_weight=1.0, reduction="mean"):
         super(L1Loss, self).__init__()
-        if reduction not in ['none', 'mean', 'sum']:
-            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
+        if reduction not in ["none", "mean", "sum"]:
+            raise ValueError(
+                f"Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}"
+            )
 
         self.loss_weight = loss_weight
         self.reduction = reduction
@@ -66,7 +69,9 @@ class L1Loss(nn.Module):
             target (Tensor): of shape (N, C, H, W). Ground truth tensor.
             weight (Tensor, optional): of shape (N, C, H, W). Element-wise weights. Default: None.
         """
-        return self.loss_weight * l1_loss(pred, target, weight, reduction=self.reduction)
+        return self.loss_weight * l1_loss(
+            pred, target, weight, reduction=self.reduction
+        )
 
 
 @LOSS_REGISTRY.register()
@@ -79,10 +84,12 @@ class MSELoss(nn.Module):
             Supported choices are 'none' | 'mean' | 'sum'. Default: 'mean'.
     """
 
-    def __init__(self, loss_weight=1.0, reduction='mean'):
+    def __init__(self, loss_weight=1.0, reduction="mean"):
         super(MSELoss, self).__init__()
-        if reduction not in ['none', 'mean', 'sum']:
-            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
+        if reduction not in ["none", "mean", "sum"]:
+            raise ValueError(
+                f"Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}"
+            )
 
         self.loss_weight = loss_weight
         self.reduction = reduction
@@ -94,7 +101,9 @@ class MSELoss(nn.Module):
             target (Tensor): of shape (N, C, H, W). Ground truth tensor.
             weight (Tensor, optional): of shape (N, C, H, W). Element-wise weights. Default: None.
         """
-        return self.loss_weight * mse_loss(pred, target, weight, reduction=self.reduction)
+        return self.loss_weight * mse_loss(
+            pred, target, weight, reduction=self.reduction
+        )
 
 
 @LOSS_REGISTRY.register()
@@ -112,10 +121,12 @@ class CharbonnierLoss(nn.Module):
         eps (float): A value used to control the curvature near zero. Default: 1e-12.
     """
 
-    def __init__(self, loss_weight=1.0, reduction='mean', eps=1e-12):
+    def __init__(self, loss_weight=1.0, reduction="mean", eps=1e-12):
         super(CharbonnierLoss, self).__init__()
-        if reduction not in ['none', 'mean', 'sum']:
-            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
+        if reduction not in ["none", "mean", "sum"]:
+            raise ValueError(
+                f"Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}"
+            )
 
         self.loss_weight = loss_weight
         self.reduction = reduction
@@ -128,7 +139,9 @@ class CharbonnierLoss(nn.Module):
             target (Tensor): of shape (N, C, H, W). Ground truth tensor.
             weight (Tensor, optional): of shape (N, C, H, W). Element-wise weights. Default: None.
         """
-        return self.loss_weight * charbonnier_loss(pred, target, weight, eps=self.eps, reduction=self.reduction)
+        return self.loss_weight * charbonnier_loss(
+            pred, target, weight, eps=self.eps, reduction=self.reduction
+        )
 
 
 @LOSS_REGISTRY.register()
@@ -139,10 +152,14 @@ class WeightedTVLoss(L1Loss):
         loss_weight (float): Loss weight. Default: 1.0.
     """
 
-    def __init__(self, loss_weight=1.0, reduction='mean'):
-        if reduction not in ['mean', 'sum']:
-            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: mean | sum')
-        super(WeightedTVLoss, self).__init__(loss_weight=loss_weight, reduction=reduction)
+    def __init__(self, loss_weight=1.0, reduction="mean"):
+        if reduction not in ["mean", "sum"]:
+            raise ValueError(
+                f"Unsupported reduction mode: {reduction}. Supported ones are: mean | sum"
+            )
+        super(WeightedTVLoss, self).__init__(
+            loss_weight=loss_weight, reduction=reduction
+        )
 
     def forward(self, pred, weight=None):
         if weight is None:
@@ -184,14 +201,16 @@ class PerceptualLoss(nn.Module):
         criterion (str): Criterion used for perceptual loss. Default: 'l1'.
     """
 
-    def __init__(self,
-                 layer_weights,
-                 vgg_type='vgg19',
-                 use_input_norm=True,
-                 range_norm=False,
-                 perceptual_weight=1.0,
-                 style_weight=0.,
-                 criterion='l1'):
+    def __init__(
+        self,
+        layer_weights,
+        vgg_type="vgg19",
+        use_input_norm=True,
+        range_norm=False,
+        perceptual_weight=1.0,
+        style_weight=0.0,
+        criterion="l1",
+    ):
         super(PerceptualLoss, self).__init__()
         self.perceptual_weight = perceptual_weight
         self.style_weight = style_weight
@@ -200,17 +219,18 @@ class PerceptualLoss(nn.Module):
             layer_name_list=list(layer_weights.keys()),
             vgg_type=vgg_type,
             use_input_norm=use_input_norm,
-            range_norm=range_norm)
+            range_norm=range_norm,
+        )
 
         self.criterion_type = criterion
-        if self.criterion_type == 'l1':
+        if self.criterion_type == "l1":
             self.criterion = torch.nn.L1Loss()
-        elif self.criterion_type == 'l2':
+        elif self.criterion_type == "l2":
             self.criterion = torch.nn.L2loss()
-        elif self.criterion_type == 'fro':
+        elif self.criterion_type == "fro":
             self.criterion = None
         else:
-            raise NotImplementedError(f'{criterion} criterion has not been supported.')
+            raise NotImplementedError(f"{criterion} criterion has not been supported.")
 
     def forward(self, x, gt):
         """Forward function.
@@ -230,10 +250,16 @@ class PerceptualLoss(nn.Module):
         if self.perceptual_weight > 0:
             percep_loss = 0
             for k in x_features.keys():
-                if self.criterion_type == 'fro':
-                    percep_loss += torch.norm(x_features[k] - gt_features[k], p='fro') * self.layer_weights[k]
+                if self.criterion_type == "fro":
+                    percep_loss += (
+                        torch.norm(x_features[k] - gt_features[k], p="fro")
+                        * self.layer_weights[k]
+                    )
                 else:
-                    percep_loss += self.criterion(x_features[k], gt_features[k]) * self.layer_weights[k]
+                    percep_loss += (
+                        self.criterion(x_features[k], gt_features[k])
+                        * self.layer_weights[k]
+                    )
             percep_loss *= self.perceptual_weight
         else:
             percep_loss = None
@@ -242,12 +268,23 @@ class PerceptualLoss(nn.Module):
         if self.style_weight > 0:
             style_loss = 0
             for k in x_features.keys():
-                if self.criterion_type == 'fro':
-                    style_loss += torch.norm(
-                        self._gram_mat(x_features[k]) - self._gram_mat(gt_features[k]), p='fro') * self.layer_weights[k]
+                if self.criterion_type == "fro":
+                    style_loss += (
+                        torch.norm(
+                            self._gram_mat(x_features[k])
+                            - self._gram_mat(gt_features[k]),
+                            p="fro",
+                        )
+                        * self.layer_weights[k]
+                    )
                 else:
-                    style_loss += self.criterion(self._gram_mat(x_features[k]), self._gram_mat(
-                        gt_features[k])) * self.layer_weights[k]
+                    style_loss += (
+                        self.criterion(
+                            self._gram_mat(x_features[k]),
+                            self._gram_mat(gt_features[k]),
+                        )
+                        * self.layer_weights[k]
+                    )
             style_loss *= self.style_weight
         else:
             style_loss = None
@@ -283,25 +320,27 @@ class GANLoss(nn.Module):
             for discriminators.
     """
 
-    def __init__(self, gan_type, real_label_val=1.0, fake_label_val=0.0, loss_weight=1.0):
+    def __init__(
+        self, gan_type, real_label_val=1.0, fake_label_val=0.0, loss_weight=1.0
+    ):
         super(GANLoss, self).__init__()
         self.gan_type = gan_type
         self.loss_weight = loss_weight
         self.real_label_val = real_label_val
         self.fake_label_val = fake_label_val
 
-        if self.gan_type == 'vanilla':
+        if self.gan_type == "vanilla":
             self.loss = nn.BCEWithLogitsLoss()
-        elif self.gan_type == 'lsgan':
+        elif self.gan_type == "lsgan":
             self.loss = nn.MSELoss()
-        elif self.gan_type == 'wgan':
+        elif self.gan_type == "wgan":
             self.loss = self._wgan_loss
-        elif self.gan_type == 'wgan_softplus':
+        elif self.gan_type == "wgan_softplus":
             self.loss = self._wgan_softplus_loss
-        elif self.gan_type == 'hinge':
+        elif self.gan_type == "hinge":
             self.loss = nn.ReLU()
         else:
-            raise NotImplementedError(f'GAN type {self.gan_type} is not implemented.')
+            raise NotImplementedError(f"GAN type {self.gan_type} is not implemented.")
 
     def _wgan_loss(self, input, target):
         """wgan loss.
@@ -344,9 +383,9 @@ class GANLoss(nn.Module):
                 return Tensor.
         """
 
-        if self.gan_type in ['wgan', 'wgan_softplus']:
+        if self.gan_type in ["wgan", "wgan_softplus"]:
             return target_is_real
-        target_val = (self.real_label_val if target_is_real else self.fake_label_val)
+        target_val = self.real_label_val if target_is_real else self.fake_label_val
         return input.new_ones(input.size()) * target_val
 
     def forward(self, input, target_is_real, is_disc=False):
@@ -362,7 +401,7 @@ class GANLoss(nn.Module):
             Tensor: GAN loss value.
         """
         target_label = self.get_target_label(input, target_is_real)
-        if self.gan_type == 'hinge':
+        if self.gan_type == "hinge":
             if is_disc:  # for discriminators in hinge-gan
                 input = -input if target_is_real else input
                 loss = self.loss(1 + input).mean()
@@ -381,8 +420,12 @@ class MultiScaleGANLoss(GANLoss):
     MultiScaleGANLoss accepts a list of predictions
     """
 
-    def __init__(self, gan_type, real_label_val=1.0, fake_label_val=0.0, loss_weight=1.0):
-        super(MultiScaleGANLoss, self).__init__(gan_type, real_label_val, fake_label_val, loss_weight)
+    def __init__(
+        self, gan_type, real_label_val=1.0, fake_label_val=0.0, loss_weight=1.0
+    ):
+        super(MultiScaleGANLoss, self).__init__(
+            gan_type, real_label_val, fake_label_val, loss_weight
+        )
 
     def forward(self, input, target_is_real, is_disc=False):
         """
@@ -405,24 +448,30 @@ class MultiScaleGANLoss(GANLoss):
 
 def r1_penalty(real_pred, real_img):
     """R1 regularization for discriminator. The core idea is to
-        penalize the gradient on real data alone: when the
-        generator distribution produces the true data distribution
-        and the discriminator is equal to 0 on the data manifold, the
-        gradient penalty ensures that the discriminator cannot create
-        a non-zero gradient orthogonal to the data manifold without
-        suffering a loss in the GAN game.
+    penalize the gradient on real data alone: when the
+    generator distribution produces the true data distribution
+    and the discriminator is equal to 0 on the data manifold, the
+    gradient penalty ensures that the discriminator cannot create
+    a non-zero gradient orthogonal to the data manifold without
+    suffering a loss in the GAN game.
 
-        Ref:
-        Eq. 9 in Which training methods for GANs do actually converge.
-        """
-    grad_real = autograd.grad(outputs=real_pred.sum(), inputs=real_img, create_graph=True)[0]
+    Ref:
+    Eq. 9 in Which training methods for GANs do actually converge.
+    """
+    grad_real = autograd.grad(
+        outputs=real_pred.sum(), inputs=real_img, create_graph=True
+    )[0]
     grad_penalty = grad_real.pow(2).view(grad_real.shape[0], -1).sum(1).mean()
     return grad_penalty
 
 
 def g_path_regularize(fake_img, latents, mean_path_length, decay=0.01):
-    noise = torch.randn_like(fake_img) / math.sqrt(fake_img.shape[2] * fake_img.shape[3])
-    grad = autograd.grad(outputs=(fake_img * noise).sum(), inputs=latents, create_graph=True)[0]
+    noise = torch.randn_like(fake_img) / math.sqrt(
+        fake_img.shape[2] * fake_img.shape[3]
+    )
+    grad = autograd.grad(
+        outputs=(fake_img * noise).sum(), inputs=latents, create_graph=True
+    )[0]
     path_lengths = torch.sqrt(grad.pow(2).sum(2).mean(1))
 
     path_mean = mean_path_length + decay * (path_lengths.mean() - mean_path_length)
@@ -449,7 +498,7 @@ def gradient_penalty_loss(discriminator, real_data, fake_data, weight=None):
     alpha = real_data.new_tensor(torch.rand(batch_size, 1, 1, 1))
 
     # interpolate between real_data and fake_data
-    interpolates = alpha * real_data + (1. - alpha) * fake_data
+    interpolates = alpha * real_data + (1.0 - alpha) * fake_data
     interpolates = autograd.Variable(interpolates, requires_grad=True)
 
     disc_interpolates = discriminator(interpolates)
@@ -459,12 +508,13 @@ def gradient_penalty_loss(discriminator, real_data, fake_data, weight=None):
         grad_outputs=torch.ones_like(disc_interpolates),
         create_graph=True,
         retain_graph=True,
-        only_inputs=True)[0]
+        only_inputs=True,
+    )[0]
 
     if weight is not None:
         gradients = gradients * weight
 
-    gradients_penalty = ((gradients.norm(2, dim=1) - 1)**2).mean()
+    gradients_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
     if weight is not None:
         gradients_penalty /= torch.mean(weight)
 
@@ -482,16 +532,18 @@ class GANFeatLoss(nn.Module):
             Supported choices are 'none' | 'mean' | 'sum'. Default: 'mean'.
     """
 
-    def __init__(self, criterion='l1', loss_weight=1.0, reduction='mean'):
+    def __init__(self, criterion="l1", loss_weight=1.0, reduction="mean"):
         super(GANFeatLoss, self).__init__()
-        if criterion == 'l1':
+        if criterion == "l1":
             self.loss_op = L1Loss(loss_weight, reduction)
-        elif criterion == 'l2':
+        elif criterion == "l2":
             self.loss_op = MSELoss(loss_weight, reduction)
-        elif criterion == 'charbonnier':
+        elif criterion == "charbonnier":
             self.loss_op = CharbonnierLoss(loss_weight, reduction)
         else:
-            raise ValueError(f'Unsupported loss mode: {criterion}. Supported ones are: l1|l2|charbonnier')
+            raise ValueError(
+                f"Unsupported loss mode: {criterion}. Supported ones are: l1|l2|charbonnier"
+            )
 
         self.loss_weight = loss_weight
 
@@ -502,7 +554,9 @@ class GANFeatLoss(nn.Module):
             # last output is the final prediction, exclude it
             num_intermediate_outputs = len(pred_fake[i]) - 1
             for j in range(num_intermediate_outputs):  # for each layer output
-                unweighted_loss = self.loss_op(pred_fake[i][j], pred_real[i][j].detach())
+                unweighted_loss = self.loss_op(
+                    pred_fake[i][j], pred_real[i][j].detach()
+                )
                 loss += unweighted_loss / num_d
         return loss * self.loss_weight
 
@@ -511,6 +565,36 @@ class GANFeatLoss(nn.Module):
 class tanh_L1Loss(nn.Module):
     def __init__(self):
         super(tanh_L1Loss, self).__init__()
+
     def forward(self, x, y):
         loss = torch.mean(torch.abs(torch.tanh(x) - torch.tanh(y)))
         return loss
+
+
+@LOSS_REGISTRY.register()
+class FFT_abs_L1(nn.Module):  # by kyusu
+    def __init__(self):
+        super(FFT_abs_L1, self).__init__()
+        self.criterion = torch.nn.L1Loss()
+
+    def forward(self, _input, _gt):
+        input_fft = abs(
+            torch.fft.fftn(_input, dim=(-2, -1))
+        )  # 0 ~ 1 사이로 NORM 된 애가 Input된 애여야 함
+        gt_fft = abs(torch.fft.fftn(_gt, dim=(-2, -1)))
+        loss_fft = self.criterion(input_fft, gt_fft)
+        return loss_fft
+
+
+@LOSS_REGISTRY.register()
+class ECFNet_loss(nn.Module):
+    def __init__(self, ratio=0.5):
+        super(ECFNet_loss, self).__init__()
+        self.charbonier = CharbonnierLoss()
+        self.fft_abs = FFT_abs_L1()
+        self.ratio = ratio
+
+    def forward(self, _input, _gt):
+        charbonnier_loss = self.charbonier(_input, _gt)
+        fft_abs = self.fft_abs(_input, _gt)
+        return charbonnier_loss + self.ratio * fft_abs
