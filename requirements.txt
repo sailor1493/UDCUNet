@@ -12,7 +12,7 @@ yapf
 tqdm
 lpips
 tensorboard
-imageio
+imageio<2.28
 mmcv==1.7.1
 rawpy
 torchinfo
