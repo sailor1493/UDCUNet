@@ -1,0 +1,138 @@
+# general settings
+name: kyusu-SIT4-UDCUNet-clamploss # kyusu can change
+model_type: UDCModel
+scale: 1
+num_gpu: 4
+manual_seed: 10
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: udc_pair_train
+    type: PairedImgPSFNpyDataset
+    lq_map_type: norm
+    gt_map_type: norm
+    lq_map_range: 1023.
+    gt_map_range: 1023.
+    filename_tmpl: '{}'
+    io_backend:
+      type: npy
+    folders:
+      # kyusu can change
+      udc-sit-train:
+        dataroot_lq: /home/thunder_dataset/UDC_SIT/npy/training/input
+        dataroot_gt: /home/thunder_dataset/UDC_SIT/npy/training/GT
+        meta_info_file: /home/chanwoo/train-lists/Train_input_list_0412.txt
+
+    gt_size: 256
+    use_flip: false
+    use_rot: false
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 8
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: udc_val
+    type: PairedImgPSFNpyDataset
+    lq_map_type: norm
+    gt_map_type: norm
+    lq_map_range: 1023.
+    gt_map_range: 1023.
+    io_backend:
+      type: npy
+    folders:
+      # kyusu can change
+      udc-sit-validation:
+        dataroot_lq: /home/thunder_dataset/UDC_SIT/npy/validation1/input
+        dataroot_gt: /home/thunder_dataset/UDC_SIT/npy/validation1/GT
+        meta_info_file: /home/chanwoo/train-lists/Validation1_input_list_0412.txt
+
+#### network structures
+# do not change
+network_g:
+  type: UDCUNet
+  nf: 32
+  in_nc: 4
+  out_nc: 4
+  depths: [2,2,2,8,2,2,2]
+  DyK_size: 3
+
+# path
+# do not change
+path:
+  pretrain_network_g: ~
+#  param_key_g: 'params_ema'
+  strict_load_g: true
+  resume_state: ~
+
+# training settings
+# do not change
+train:
+  ema_decay: 0.999
+  optim_g:
+    type: Adam
+    lr: !!float 2e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: CosineAnnealingRestartLR
+    periods: [50000, 100000, 150000, 150000, 150000, 150000, 150000]
+    restart_weights: [ 1, 1, 1, 1, 1, 1, 1]
+    eta_min: !!float 1e-7
+
+  total_iter: 600000
+  warmup_iter: -1  # no warm up
+
+  # losses
+  # Chanwoo: Might have to change if kyusu want different loss
+  pixel_opt:
+    type: MSE_FFT
+
+  # 인수인계시 확인: 이거 활성화 해야 하는지.
+  # 활성화 하는 경우 loss는 위에거 + 밑에거가 된다.
+  # perceptual_opt:
+  #   type: MSE_FFT
+
+
+# validation settings
+val:
+  val_freq: !!float 5000 # kyusu can change
+  save_img: true # kyusu can change
+  save_img_ratio: !!float 0.1 # kyusu can change. 0 < value < 1, ratio of validation image to be saved
+  # do not change belows
+  dng_info: /home/chanwoo/background.dng 
+  max_pxl: 1023.
+  clamp:
+    min: 0.
+    max: 1.
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: false
+    ssim:
+      type: calculate_ssim
+      crop_border: 0
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 250 # kyusu can change
+  save_checkpoint_freq: !!float 2500 # kyusu can change
+  # do not modify or delete belwo
+  use_tb_logger: false
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+# do not change or delete below
+dist_params:
+  backend: nccl
+  port: 29500
