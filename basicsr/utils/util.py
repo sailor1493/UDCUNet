@@ -168,7 +168,7 @@ def tensor2img(tensor, out_type=np.uint8, min_max=(0, 1)):
         result = result[0]
     return result
 
-def tensor2npy(tensor, out_type=np.float):
+def tensor2npy(tensor, out_type=np.single):
     """ Convert torch Tensors into image numpy arrays.
     After clamping to [min, max], values will be normalized to [0, 1].
 
