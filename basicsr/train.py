@@ -215,5 +215,7 @@ def train_pipeline(root_path):
 
 
 if __name__ == '__main__':
+    import warnings
+    warnings.filterwarnings("ignore")
     root_path = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir))
     train_pipeline(root_path)
